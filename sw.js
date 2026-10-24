@@ -1,6 +1,6 @@
 /* Bump this version when any precached file changes. All URLs stay in project scope. */
 const CACHE_PREFIX = `crewmate-defense-${new URL(self.registration.scope).pathname}-`;
-const CACHE_NAME = `${CACHE_PREFIX}v1`;
+const CACHE_NAME = `${CACHE_PREFIX}v2`;
 const SHELL = [
   './', './index.html', './style.css', './game.js', './manifest.json',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'

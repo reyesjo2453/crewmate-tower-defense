@@ -8,30 +8,83 @@
   const TOWERS = {
     blaster: { name: 'Blaster', cost: 45, tagline: 'Fast & trusty', description: 'Quick shots. Big team spirit. Great beside bends and long stretches.', upgrades: [40, 65], stats: [
       { damage: 8, cooldown: .5, range: 135 }, { damage: 14, cooldown: .44, range: 148 }, { damage: 22, cooldown: .38, range: 162 }
-    ] },
+    ], branches: {
+      gatling: { name: 'Gatling', cost: 110, hint: 'Twin barrels. Faster shots, lighter hits.', emblem: 'Ⅱ', stats: { damage: 18, cooldown: .2, range: 155 } },
+      longshot: { name: 'Longshot', cost: 125, hint: 'A long barrel. Heavy hits from far away.', emblem: '⌖', stats: { damage: 55, cooldown: .8, range: 235 } }
+    } },
     cannon: { name: 'Cannon', cost: 80, tagline: 'A big splash', description: 'Slow, powerful shots splash every bot nearby. Best for bunches of bots.', upgrades: [65, 95], stats: [
       { damage: 22, cooldown: 1.5, range: 145, splash: 65 }, { damage: 36, cooldown: 1.35, range: 158, splash: 73 }, { damage: 58, cooldown: 1.2, range: 172, splash: 82 }
-    ] },
+    ], branches: {
+      bigsplash: { name: 'Big Splash', cost: 135, hint: 'A wide bell barrel. Extra-wide splash.', emblem: '◎', stats: { damage: 62, cooldown: 1.25, splash: 125 } },
+      cluster: { name: 'Cluster', cost: 145, hint: 'Three pods. Each impact adds 3 mini-blasts.', emblem: '⁙', stats: { damage: 42, cooldown: 1.35, splash: 60, cluster: { count: 3, damage: 22, radius: 48, offset: 44 } } }
+    } },
     frost: { name: 'Frost', cost: 65, tagline: 'Chill them out', description: 'Chilly shots slow bots so your other towers have more time to help.', upgrades: [55, 85], stats: [
       { damage: 3, cooldown: .85, range: 130, slow: .52, duration: 1.7 }, { damage: 6, cooldown: .75, range: 144, slow: .43, duration: 1.9 }, { damage: 10, cooldown: .65, range: 158, slow: .34, duration: 2.1 }
-    ] }
+    ], branches: {
+      blizzard: { name: 'Blizzard', cost: 125, hint: 'A snow halo. Pulses slow every bot in range.', emblem: '◉', stats: { damage: 3, cooldown: 1.1, range: 158, slow: .48, duration: 1.4, aura: true } },
+      deepfreeze: { name: 'Deep Freeze', cost: 130, hint: 'An ice crystal. Every 3rd hit freezes briefly.', emblem: '◆', stats: { damage: 12, cooldown: .65, freezeEvery: 3, freezeDuration: .65 } }
+    } }
   };
-  // Each wave is [bot count, base HP, speed in px/s, spawn spacing, coins per bot].
-  // A boss is explicitly appended only to the last wave of Bot Flood.
+  // Silhouettes and accessories are deliberate: enemy identity never relies on color.
+  const ENEMY_KINDS = {
+    basic: { id: 'basic', renderScale: 0.85, name: 'Basic', hp: 26, speed: 46, reward: 8, hint: 'Steady little footsteps.', shape: 'capsule', accessory: 'antenna', renderer: drawKindSilhouette },
+    scout: { id: 'scout', renderScale: 0.65, name: 'Scout', hp: 22, speed: 72, reward: 8, hint: 'Light and quick, with a radar dish.', shape: 'triangle', accessory: 'dish', renderer: drawKindSilhouette },
+    bulky: { id: 'bulky', renderScale: 0.95, name: 'Bulky', hp: 95, speed: 34, reward: 12, hint: 'Slow, wide, and hard to stop.', shape: 'wide', accessory: 'shoulders', renderer: drawKindSilhouette },
+    runner: { id: 'runner', renderScale: 0.8, name: 'Runner', hp: 35, speed: 78, reward: 8, hint: 'Long legs carry it quickly.', shape: 'tall', accessory: 'legs', renderer: drawKindSilhouette },
+    zipper: { id: 'zipper', renderScale: 0.55, name: 'Zipper', hp: 18, speed: 125, reward: 5, packSize: 3, hint: 'Tiny darts race in tight trios.', shape: 'dart', accessory: 'fins', renderer: drawKindSilhouette },
+    plated: { id: 'plated', renderScale: 0.85, name: 'Plated', hp: 82, speed: 48, reward: 11, armor: 3, hint: 'A front shield softens each hit.', shape: 'hexagon', accessory: 'shield', renderer: drawKindSilhouette },
+    armored: { id: 'armored', renderScale: 0.9, name: 'Armored', hp: 100, speed: 50, reward: 12, armor: 5, hint: 'Square armor shrugs off small hits.', shape: 'square', accessory: 'rivets', renderer: drawKindSilhouette },
+    splitter: { id: 'splitter', renderScale: 0.85, name: 'Splitter', hp: 72, speed: 60, reward: 9, onDeathSplit: { kind: 'mini', count: 2 }, hint: 'Twin shells split into two minis.', shape: 'double', accessory: 'seam', renderer: drawKindSilhouette },
+    mini: { id: 'mini', renderScale: 0.6, name: 'Mini', hp: 16, speed: 90, reward: 2, hint: 'A small diamond. Never splits again.', shape: 'diamond', accessory: 'stub', renderer: drawKindSilhouette },
+    swarmer: { id: 'swarmer', renderScale: 0.65, name: 'Swarmer', hp: 17, speed: 95, reward: 4, packSize: 4, hint: 'Round bots bustle in dense packs.', shape: 'round', accessory: 'feelers', renderer: drawKindSilhouette },
+    boss: { id: 'boss', renderScale: 1.35, name: 'Big Boss', hp: 3200, speed: 28, reward: 80, hint: 'One giant crowned visitor. The finale!', shape: 'giant', accessory: 'crown', renderer: drawKindSilhouette }
+  };
+  // Explicit groups count individual bots, not packs. packSize controls their spacing.
+  // HP scales by wave; boss stats are always taken unchanged from the registry.
+  const wave = (hpScale, spacing, groups) => ({ hpScale, groups: groups.map(([kind,count]) => ({ kind, count, spacing })) });
   const LEVELS = [
     { id: 0, name: 'First Stand', subtitle: 'A quiet moon. Your first brave stand.', difficulty: 'NICE & GENTLE', coins: 140, lives: 20,
+      theme: { bgTint: '#142a3e', tileA: '#193146', tileB: '#1b3449', pathColor: '#b9c8ac', pathBorder: '#607d80', decorSet: ['crater','rock','stars'] },
       corners: [[0,1],[6,1],[6,4],[2,4],[2,7],[8,7]],
-      tip: 'A Blaster beside a bend is a great first teammate.',
-      waves: [[4,26,46,1.2,8],[5,30,47,1.1,8],[6,35,48,1.05,8],[7,40,49,1,8],[8,46,50,.95,8],[9,53,51,.9,8],[10,60,52,.85,8],[11,68,53,.8,8],[12,76,54,.75,8],[14,86,55,.7,9]] },
-    { id: 1, name: 'Winding Way', subtitle: 'More twists. Quicker little troublemakers.', difficulty: 'PICKING UP PACE', coins: 160, lives: 20,
-      corners: [[0,1],[7,1],[7,3],[1,3],[1,6],[7,6],[7,8],[8,8]], runners: 3,
-      tip: 'Frost slows the speedy bots. A Cannon loves a crowded corner.',
-      waves: [[5,33,56,1,8],[6,39,57,.95,8],[7,46,58,.9,8],[8,54,59,.85,8],[9,62,60,.8,8],[10,71,61,.78,8],[11,80,62,.75,8],[12,90,63,.72,8],[13,100,64,.7,8],[14,111,65,.68,9],[15,123,66,.65,9],[16,136,67,.62,9],[17,150,68,.6,9],[18,165,69,.57,9],[20,182,70,.55,10]] },
-    { id: 2, name: 'Bot Flood', subtitle: 'One busy base. One very big final visitor.', difficulty: 'THE BIG CHALLENGE', coins: 180, lives: 20,
-      corners: [[0,0],[6,0],[6,2],[2,2],[2,4],[7,4],[7,6],[1,6],[1,8],[8,8]], runners: 4, armored: 5,
-      tip: 'Cover several bends, upgrade your crew, and save a warm welcome for the boss.',
+      tip: 'Scouts arrive in wave 4; the big, slow Bulky bots join in wave 7.',
+      waves: [
+        wave(1,1.2,[['basic',4]]), wave(1.15,1.1,[['basic',5]]), wave(1.35,1.05,[['basic',6]]),
+        wave(1.5,1,[['basic',5],['scout',2]]), wave(1.7,.95,[['basic',5],['scout',3]]),
+        wave(2,.9,[['basic',5],['scout',4]]), wave(2.2,.85,[['basic',5],['scout',3],['bulky',2]]),
+        wave(2.45,.8,[['basic',5],['scout',4],['bulky',2]]), wave(2.75,.75,[['basic',5],['scout',4],['bulky',3]]),
+        wave(3,.7,[['basic',5],['scout',5],['bulky',4]])
+      ] },
+    { id: 1, name: 'Winding Way', subtitle: 'A green world. A quicker kind of trouble.', difficulty: 'PICKING UP PACE', coins: 160, lives: 20,
+      theme: { bgTint: '#1d443c', tileA: '#285342', tileB: '#2c5946', pathColor: '#c6b58b', pathBorder: '#746d50', decorSet: ['tree','bush','flower','pond'] },
+      corners: [[0,1],[7,1],[7,3],[1,3],[1,6],[7,6],[7,8],[8,8]],
+      tip: 'Zippers race in tight trios. Plated bots arrive in wave 8. Splash and Frost make a fine team.',
+      waves: [
+        wave(1,1,[['runner',5]]), wave(1.15,.95,[['runner',6]]), wave(1.3,.9,[['runner',4],['zipper',3]]),
+        wave(1.45,.85,[['runner',5],['zipper',3]]), wave(1.6,.8,[['runner',4],['zipper',6]]),
+        wave(1.75,.78,[['runner',5],['zipper',6]]), wave(1.9,.75,[['runner',6],['zipper',6]]),
+        wave(2.05,.72,[['runner',5],['zipper',6],['plated',2]]), wave(2.2,.7,[['runner',6],['zipper',6],['plated',3]]),
+        wave(2.35,.68,[['runner',6],['zipper',9],['plated',3]]), wave(2.5,.65,[['runner',7],['zipper',9],['plated',4]]),
+        wave(2.65,.62,[['runner',8],['zipper',9],['plated',4]]), wave(2.8,.6,[['runner',8],['zipper',12],['plated',5]]),
+        wave(3,.57,[['runner',9],['zipper',12],['plated',5]]), wave(3.2,.55,[['runner',10],['zipper',12],['plated',6]])
+      ] },
+    { id: 2, name: 'Bot Flood', subtitle: 'Dusk falls. A very big visitor is on the way.', difficulty: 'THE BIG CHALLENGE', coins: 180, lives: 20,
+      theme: { bgTint: '#403029', tileA: '#4e3b2e', tileB: '#554132', pathColor: '#302e30', pathBorder: '#9c6b49', decorSet: ['glowrock','twistedtree','ember'] },
+      corners: [[0,0],[6,0],[6,2],[2,2],[2,4],[7,4],[7,6],[1,6],[1,8],[8,8]],
+      tip: 'Splitters leave two minis behind. Pick a tower specialization after its two upgrades.',
       boss: { hp: 3200, speed: 28, reward: 80 },
-      waves: [[6,44,60,.95,9],[7,52,61,.9,9],[8,61,62,.85,9],[9,71,63,.8,9],[10,82,64,.75,9],[11,94,65,.72,9],[12,107,66,.69,9],[13,121,67,.66,9],[14,136,68,.63,9],[15,152,69,.6,9],[16,169,70,.57,10],[17,187,71,.55,10],[18,206,72,.53,10],[19,226,73,.51,10],[20,247,74,.49,10],[21,269,75,.47,10],[22,292,76,.45,10],[23,316,77,.43,10],[24,341,78,.41,10],[25,367,79,.4,11]] }
+      waves: [
+        wave(.8,.95,[['runner',4],['armored',2]]), wave(.9,.9,[['runner',5],['armored',2]]),
+        wave(1,.85,[['runner',4],['armored',2],['splitter',2]]), wave(1.15,.8,[['runner',4],['armored',3],['splitter',2]]),
+        wave(1.3,.75,[['runner',4],['armored',2],['swarmer',8]]), wave(1.45,.72,[['runner',4],['armored',3],['splitter',3],['swarmer',4]]),
+        wave(1.6,.69,[['runner',5],['armored',3],['splitter',3],['swarmer',8]]), wave(1.75,.66,[['runner',5],['armored',4],['splitter',3],['swarmer',8]]),
+        wave(1.9,.63,[['runner',6],['armored',4],['splitter',4],['swarmer',8]]), wave(2.1,.6,[['runner',6],['armored',4],['splitter',4],['swarmer',12]]),
+        wave(2.3,.57,[['runner',7],['armored',5],['splitter',4],['swarmer',12]]), wave(2.5,.55,[['runner',7],['armored',5],['splitter',5],['swarmer',12]]),
+        wave(2.7,.53,[['runner',8],['armored',6],['splitter',5],['swarmer',12]]), wave(2.9,.51,[['runner',8],['armored',6],['splitter',6],['swarmer',16]]),
+        wave(3.1,.49,[['runner',9],['armored',7],['splitter',6],['swarmer',16]]), wave(3.3,.47,[['runner',9],['armored',7],['splitter',7],['swarmer',16]]),
+        wave(3.55,.45,[['runner',10],['armored',8],['splitter',7],['swarmer',16]]), wave(3.8,.43,[['runner',10],['armored',8],['splitter',8],['swarmer',20]]),
+        wave(4.1,.41,[['runner',11],['armored',9],['splitter',8],['swarmer',20]]),
+        wave(4.4,.4,[['runner',11],['armored',9],['splitter',8],['swarmer',20],['boss',1]])
+      ] }
   ];
 
   const expandPath = corners => {
@@ -49,6 +102,12 @@
     level.path = expandPath(level.corners);
     level.pathSet = new Set(level.path.map(p => `${p.c},${p.r}`));
     level.length = (level.path.length - 1) * CELL;
+    level.roster = [...new Set(level.waves.flatMap(wave => wave.groups.map(group => group.kind)))];
+    for (const id of [...level.roster]) {
+      const split = ENEMY_KINDS[id].onDeathSplit;
+      if (split && !level.roster.includes(split.kind)) level.roster.push(split.kind);
+    }
+    level.decorations = decorationPlan(level);
   });
 
   let storageAvailable = true;
@@ -114,7 +173,27 @@
   };
   const distanceSq = (a,b) => (a.x-b.x)**2 + (a.y-b.y)**2;
   const towerAt = (c,r) => state && state.towers.find(t => t.c === c && t.r === r);
-  const towerStats = tower => TOWERS[tower.type].stats[tower.level];
+  const towerStats = tower => ({ ...TOWERS[tower.type].stats[tower.level], ...(TOWERS[tower.type].branches[tower.branch]?.stats || {}) });
+  const sellRefund = tower => Math.floor(tower.invested * .65);
+  const waveCount = wave => wave.groups.reduce((total, group) => total + group.count, 0);
+  const waveHasBoss = wave => wave.groups.some(group => group.kind === 'boss');
+  function makeWaveQueue(wave) {
+    const queue = [];
+    for (const group of wave.groups) {
+      const kind = ENEMY_KINDS[group.kind], hpScale = kind.id === 'boss' ? 1 : wave.hpScale;
+      let remaining = group.count;
+      if (kind.id === 'boss' && queue.length) queue[queue.length - 1].spacing = 2;
+      while (remaining > 0) {
+        const size = Math.min(kind.packSize || 1, remaining);
+        for (let member = 0; member < size; member++) queue.push({
+          kind: kind.id, hp: Math.round(kind.hp * hpScale), speed: kind.speed, reward: kind.reward,
+          hpScale, spacing: member < size - 1 ? .12 : group.spacing
+        });
+        remaining -= size;
+      }
+    }
+    return queue;
+  }
   const isPlaying = () => state && !['won','lost','abandoned'].includes(state.phase);
   function announce(text) {
     $('announcement').textContent = text;
@@ -127,18 +206,37 @@
     return `<svg class="tower-icon" viewBox="0 0 56 56" aria-hidden="true"><path d="M10 42h36l-4-18H14Z" fill="#56748b" stroke="#0f172a" stroke-width="3"/><rect x="7" y="42" width="42" height="7" rx="3" fill="#0a1323"/><circle cx="28" cy="24" r="17" fill="${color}" stroke="#0f172a" stroke-width="3"/>${barrel}</svg>`;
   }
   function missionMap(level) {
-    const points = level.path.map(p => `${34+p.c*27},${24+p.r*12}`).join(' ');
-    const first = level.path[0], end = level.path[level.path.length-1];
-    const towers = level.id === 0 ? [[3,2],[5,5],[3,6]] : level.id === 1 ? [[3,2],[6,4],[2,5]] : [[4,1],[5,3],[4,7]];
-    return `<svg class="mission-preview" viewBox="0 0 285 147" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><pattern id="grid${level.id}" width="27" height="12" patternUnits="userSpaceOnUse"><circle cx="7" cy="6" r=".7" fill="#456079" opacity=".5"/></pattern></defs><rect width="285" height="147" fill="url(#grid${level.id})"/><polyline points="${points}" fill="none" stroke="#365069" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/><polyline points="${points}" fill="none" stroke="#91a9a3" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>${towers.map((t,i)=>`<circle cx="${34+t[0]*27}" cy="${24+t[1]*12}" r="8" fill="${Object.values(COLORS)[i]}" stroke="#0f172a" stroke-width="3"/>`).join('')}<circle cx="${34+first.c*27}" cy="${24+first.r*12}" r="7" fill="#ffae59" stroke="#0f172a" stroke-width="3"/><rect x="${27+end.c*27}" y="${16+end.r*12}" width="16" height="16" rx="4" fill="#a4efff" stroke="#0f172a" stroke-width="3"/></svg>`;
+    return `<canvas class="mission-preview" data-preview-level="${level.id}" width="540" height="300" aria-hidden="true"></canvas>`;
+  }
+  function rosterMarkup(level) {
+    return `<div class="enemy-roster" aria-label="Mission bots">${level.roster.map(id => {
+      const kind = ENEMY_KINDS[id];
+      return `<span class="roster-entry"><canvas width="48" height="48" data-enemy-icon="${id}" aria-hidden="true"></canvas><span><strong>${kind.name}</strong><small>${kind.hint}</small></span></span>`;
+    }).join('')}</div>`;
+  }
+  function paintMissionPreviews() {
+    for (const preview of document.querySelectorAll('[data-preview-level]')) {
+      const level = LEVELS[Number(preview.dataset.previewLevel)], context = preview.getContext('2d');
+      context.setTransform(preview.width/WIDTH,0,0,preview.height/HEIGHT,0,0);
+      renderTheme(context,level);
+      const end = level.path[level.path.length-1], first = level.path[0];
+      paintRect(context,(end.c+.5)*CELL-20,(end.r+.5)*CELL-20,40,40,8,'#a4efff','#0f172a',4);
+      paintCircle(context,(first.c+.5)*CELL,(first.r+.5)*CELL,18,'#ffae59','#0f172a',4);
+    }
+    for (const icon of document.querySelectorAll('[data-enemy-icon]')) {
+      const kind = ENEMY_KINDS[icon.dataset.enemyIcon], context = icon.getContext('2d');
+      context.clearRect(0,0,48,48);context.save();context.translate(24,26);context.scale(.62,.62);
+      kind.renderer(context,kind,'#ffb267');context.restore();
+    }
   }
   function renderMissions() {
     $('mission-progress').textContent = `${Object.values(save.best).filter(b => b.cleared).length} / 3 cleared`;
     $('mission-list').innerHTML = LEVELS.map(level => {
       const locked = level.id >= save.unlocked, best = save.best[level.id];
       const record = best ? (best.cleared ? `Cleared · best base ${best.lives} / 20 ♥` : `Best attempt · wave ${best.wave} / ${level.waves.length}`) : '';
-      return `<button class="mission-card ${!locked ? 'active' : ''}" data-level="${level.id}" ${locked ? 'disabled' : ''} aria-label="${level.name}, ${level.waves.length} waves. ${locked ? `Locked. Clear ${LEVELS[level.id-1].name} first.` : `${record || 'Ready to play'}.`}">${missionMap(level)}<div class="mission-body"><div class="mission-meta"><span>MISSION 0${level.id+1}</span><span class="difficulty">${level.difficulty}</span></div><h3>${level.name}</h3><p>${level.subtitle}</p><div class="mission-bottom"><span>${locked ? `Clear ${LEVELS[level.id-1].name} first` : `${level.waves.length} waves · 20 lives`}</span><span class="mission-arrow">${locked ? '⌑' : '→'}</span></div>${record ? `<span class="mission-best">${record}</span>` : ''}</div></button>`;
+      return `<button class="mission-card ${!locked ? 'active' : ''}" data-level="${level.id}" ${locked ? 'disabled' : ''} aria-label="${level.name}, ${level.waves.length} waves. ${locked ? `Locked. Clear ${LEVELS[level.id-1].name} first.` : `${record || 'Ready to play'}.`}">${missionMap(level)}<div class="mission-body"><div class="mission-meta"><span>MISSION 0${level.id+1}</span><span class="difficulty">${level.difficulty}</span></div><h3>${level.name}</h3><p>${level.subtitle}</p><div class="mission-bottom"><span>${locked ? `Clear ${LEVELS[level.id-1].name} first` : `${level.waves.length} waves · 20 lives`}</span><span class="mission-arrow">${locked ? '⌑' : '→'}</span></div>${record ? `<span class="mission-best">${record}</span>` : ''}${rosterMarkup(level)}</div></button>`;
     }).join('');
+    paintMissionPreviews();
   }
   function renderShop() {
     $('tower-shop').innerHTML = Object.entries(TOWERS).map(([type,tower],i) => `<button class="tower-button" data-tower="${type}" style="--tower-color:${COLORS[type]}" aria-pressed="${type === selectedType && !selectedTower}" aria-label="${tower.name}, ${tower.cost} coins. ${tower.tagline}."><span class="tower-key">${i+1}</span>${icon(type)}<span class="tower-info"><strong>${tower.name}</strong><small>${tower.tagline}</small></span><span class="tower-cost">${tower.cost}<small>COINS</small></span></button>`).join('');
@@ -148,7 +246,7 @@
     wakeAudio();
     const level = LEVELS[id];
     state = { level, phase: 'build', paused: false, coins: level.coins, lives: level.lives, wave: 0, kills: 0, leaked: 0,
-      towers: [], enemies: [], projectiles: [], particles: [], labels: [], spawnQueue: [], spawnTimer: 0, clock: 0, bossSpawned: 0, nextWaveDelay: 0 };
+      towers: [], enemies: [], projectiles: [], blasts: [], rings: [], particles: [], labels: [], spawnQueue: [], spawnTimer: 0, clock: 0, bossSpawned: 0, nextWaveDelay: 0 };
     selectedType = 'blaster'; selectedTower = null; hover = null; keyboardFocus = false;
     $('mission-screen').hidden = true; $('game-screen').hidden = false; document.body.classList.add('is-playing');
     $('level-title').textContent = level.name; $('level-number').textContent = `MISSION 0${id+1}`;
@@ -179,14 +277,14 @@
     const existing = towerAt(c,r);
     if (existing) {
       selectedTower = existing; renderShop(); updateSelection();
-      announce(`${TOWERS[existing.type].name}, level ${existing.level+1}. ${existing.level === 2 ? 'Fully upgraded.' : `Upgrade costs ${TOWERS[existing.type].upgrades[existing.level]} coins.`}`);
+      announce(`${TOWERS[existing.type].name}, level ${existing.level+1}. ${existing.branch ? `${TOWERS[existing.type].branches[existing.branch].name} specialization.` : existing.level === 2 ? 'Two upgrades complete. Choose a specialization.' : `Upgrade costs ${TOWERS[existing.type].upgrades[existing.level]} coins.`}`);
       return;
     }
-    if (state.level.pathSet.has(`${c},${r}`)) { announce('Keep the path clear! Choose a blue square.'); return; }
+    if (state.level.pathSet.has(`${c},${r}`)) { announce('Keep the path clear! Choose a square beside the path.'); return; }
     const def = TOWERS[selectedType];
     if (state.coins < def.cost) { announce(`You need ${def.cost-state.coins} more coins for a ${def.name}. Towers earn coins by stopping bots.`); return; }
     wakeAudio(); state.coins -= def.cost;
-    const tower = { id: nextId++, type: selectedType, c, r, x: (c+.5)*CELL, y: (r+.5)*CELL, level: 0, cooldown: .1, angle: -.8, recoil: 0, invested: def.cost };
+    const tower = { id: nextId++, type: selectedType, c, r, x: (c+.5)*CELL, y: (r+.5)*CELL, level: 0, cooldown: .1, angle: -.8, recoil: 0, invested: def.cost, branch: null, hits: 0 };
     state.towers.push(tower); selectedTower = tower;
     burst(tower.x,tower.y,COLORS[tower.type],9); bleep('build');
     rebuildTileSelect(); renderShop(); updateUI();
@@ -202,27 +300,44 @@
   }
   function sellTower() {
     if (!isPlaying() || state.paused || !selectedTower) return;
-    const refund = Math.floor(selectedTower.invested * .65), name = TOWERS[selectedTower.type].name;
+    const refund = sellRefund(selectedTower), name = TOWERS[selectedTower.type].name;
     state.coins += refund; state.towers = state.towers.filter(t => t !== selectedTower); selectedTower = null;
     bleep('coin'); renderShop(); rebuildTileSelect(); updateUI(); announce(`${name} recycled. ${refund} coins returned.`);
+  }
+  function chooseBranch(branchId) {
+    if (!isPlaying() || state.paused || !selectedTower || selectedTower.level !== 2 || selectedTower.branch) return;
+    const branch = TOWERS[selectedTower.type].branches[branchId];
+    if (!branch) return;
+    if (state.coins < branch.cost) { announce(`You need ${branch.cost-state.coins} more coins for ${branch.name}.`); return; }
+    state.coins -= branch.cost; selectedTower.invested += branch.cost;
+    selectedTower.branch = branchId; selectedTower.hits = 0;
+    burst(selectedTower.x,selectedTower.y,COLORS[selectedTower.type],18); bleep('upgrade');
+    updateUI(); rebuildTileSelect();
+    announce(`${branch.name} chosen! This tower's specialization is final.`);
   }
   function startWave() {
     if (!state || state.phase !== 'build' || state.paused) return;
     wakeAudio();
-    const level = state.level, row = level.waves[state.wave];
-    if (!row) return;
+    const level = state.level, next = level.waves[state.wave];
+    if (!next) return;
     state.wave++; state.phase = 'wave'; state.spawnTimer = .35;
-    state.spawnQueue = Array.from({ length: row[0] }, (_, i) => {
-      const kind = level.armored && (i+1)%level.armored === 0 ? 'armored' : level.runners && (i+1)%level.runners === 0 ? 'runner' : 'bot';
-      return { kind, hp: Math.round(row[1] * (kind === 'armored' ? 1.5 : kind === 'runner' ? .75 : 1)), speed: row[2] * (kind === 'runner' ? 1.4 : kind === 'armored' ? .8 : 1), reward: row[4], spacing: row[3] };
-    });
-    if (level.boss && state.wave === level.waves.length) state.spawnQueue.push({ kind: 'boss', ...level.boss, spacing: 1.8 });
-    updateUI(); bleep('wave'); announce(`Wave ${state.wave}! ${row[0]} bots${level.boss && state.wave === level.waves.length ? ' and one big boss' : ''} incoming.`);
+    state.spawnQueue = makeWaveQueue(next);
+    updateUI(); bleep('wave');
+    announce(`Wave ${state.wave}! ${waveCount(next)} bots incoming${waveHasBoss(next) ? ', including the big boss' : ''}.`);
   }
-  function spawnEnemy(spec) {
-    const start = pointAt(state.level,0);
-    state.enemies.push({ id: nextId++, kind: spec.kind, hp: spec.hp, maxHp: spec.hp, speed: spec.speed, reward: spec.reward, distance: 0, ...start, slow: 1, slowTime: 0, flash: 0, wobble: nextId*.7 });
-    if (spec.kind === 'boss') { state.bossSpawned++; announce('The big boss is here! Your crew has got this.'); bleep('cannon'); }
+  function spawnEnemy(spec, distance = 0) {
+    const def = ENEMY_KINDS[spec.kind];
+    if (!state || !def || !Number.isFinite(distance)) return null;
+    const progress = Math.max(0,Math.min(state.level.length,distance));
+    const hpScale = Number.isFinite(spec.hpScale) && spec.hpScale > 0 ? spec.hpScale : 1;
+    const hp = Number.isFinite(spec.hp) && spec.hp > 0 ? spec.hp : Math.round(def.hp * hpScale);
+    const enemy = { id: nextId++, kind: def.id, hp, maxHp: hp, hpScale,
+      speed: spec.speed ?? def.speed, reward: spec.reward ?? def.reward, armor: def.armor || 0,
+      distance: progress, ...pointAt(state.level,progress), slow: 1, slowTime: 0,
+      freezeTime: 0, flash: 0, wobble: nextId*.7, deathResolved: false, formationOffset: spec.formationOffset || 0 };
+    state.enemies.push(enemy);
+    if (def.id === 'boss') { state.bossSpawned++; announce('The big boss is here! Your crew has got this.'); bleep('cannon'); }
+    return enemy;
   }
   function togglePause(force) {
     if (!isPlaying()) return;
@@ -262,21 +377,38 @@
       state.particles.push({ x,y,vx:Math.cos(angle)*(35+(i%3)*22),vy:Math.sin(angle)*(35+(i%3)*22),life:.35+(i%3)*.08,maxLife:.5,color,size:2+(i%2) });
     }
   }
-  function hitEnemy(enemy,damage,stats) {
-    if (enemy.hp <= 0) return;
-    enemy.hp -= damage; enemy.flash = .08;
+  function hitEnemy(enemy,damage,stats = {},source = null) {
+    if (enemy.hp <= 0 || enemy.deathResolved) return;
+    enemy.hp -= Math.max(1,damage - enemy.armor); enemy.flash = .08;
     if (stats.slow) {
       enemy.slow = Math.min(enemy.slow,stats.slow); enemy.slowTime = Math.max(enemy.slowTime,stats.duration);
     }
+    if (source && stats.freezeEvery) {
+      source.hits++;
+      if (source.hits >= stats.freezeEvery) { source.hits = 0; enemy.freezeTime = stats.freezeDuration; }
+    }
     if (enemy.hp <= 0) {
+      enemy.hp = 0; enemy.deathResolved = true;
       state.coins += enemy.reward; state.kills++; uiDirty = true;
       burst(enemy.x,enemy.y,enemy.kind === 'boss' ? '#ffe69b' : '#ffae59',enemy.kind === 'boss' ? 24 : 7);
       state.labels.push({ x:enemy.x,y:enemy.y-15,text:`+${enemy.reward}`,life:.8,color:'#ffd46b' }); bleep('coin');
+      const split = ENEMY_KINDS[enemy.kind].onDeathSplit;
+      if (split) for (let child = 0; child < split.count; child++) spawnEnemy({
+        kind: split.kind, hpScale: enemy.hpScale, formationOffset: (child-(split.count-1)/2)*12
+      },enemy.distance);
     }
+  }
+  function splashAt(x,y,radius,damage,stats = {},source = null) {
+    burst(x,y,'#ffcc7b',12);
+    state.rings.push({ x,y,radius,life:.3,maxLife:.3,color:'#ffcc7b' });
+    // Snapshot the list: newly split minis survive the impact that created them.
+    for (const enemy of [...state.enemies]) if (enemy.hp > 0 && (enemy.x-x)**2+(enemy.y-y)**2 <= radius**2) hitEnemy(enemy,damage,stats,source);
   }
   function update(dt) {
     if (!isPlaying() || state.paused) return;
     state.clock += dt;
+    for (const ring of state.rings) ring.life -= dt;
+    state.rings = state.rings.filter(ring => ring.life > 0);
     for (const p of state.particles) { p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt; }
     state.particles = state.particles.filter(p=>p.life>0);
     for (const label of state.labels) { label.y-=22*dt; label.life-=dt; }
@@ -293,10 +425,12 @@
       enemy.flash = Math.max(0,enemy.flash-dt);
       enemy.slowTime = Math.max(0,enemy.slowTime-dt);
       if (!enemy.slowTime) enemy.slow=1;
-      enemy.distance += enemy.speed*enemy.slow*dt;
+      const frozen = enemy.freezeTime > 0;
+      enemy.freezeTime = Math.max(0,enemy.freezeTime-dt);
+      enemy.distance += frozen ? 0 : enemy.speed*enemy.slow*dt;
       Object.assign(enemy,pointAt(state.level,enemy.distance));
       if (enemy.distance >= state.level.length) {
-        enemy.hp = 0; enemy.leaked = true; state.lives--; state.leaked++; uiDirty = true;
+        enemy.hp = 0; enemy.leaked = true; enemy.deathResolved = true; state.lives--; state.leaked++; uiDirty = true;
         burst(enemy.x,enemy.y,'#ef535d',8); bleep('leak');
         if (state.lives <= 0) { state.enemies = state.enemies.filter(e=>e.hp>0); finish(false); return; }
       }
@@ -312,7 +446,10 @@
         tower.angle = Math.atan2(target.y-tower.y,target.x-tower.x);
         if (tower.cooldown<=0) {
           tower.cooldown = stats.cooldown; tower.recoil=1;
-          state.projectiles.push({ x:tower.x+Math.cos(tower.angle)*18,y:tower.y+Math.sin(tower.angle)*18,target,targetX:target.x,targetY:target.y,type:tower.type,stats,speed:tower.type==='cannon'?310:480 });
+          if (stats.aura) {
+            state.rings.push({ x:tower.x,y:tower.y,radius:stats.range,life:.5,maxLife:.5,color:COLORS.frost });
+            for (const enemy of [...state.enemies]) if (enemy.hp > 0 && distanceSq(tower,enemy) <= stats.range**2) hitEnemy(enemy,stats.damage,stats,tower);
+          } else state.projectiles.push({ x:tower.x+Math.cos(tower.angle)*18,y:tower.y+Math.sin(tower.angle)*18,target,targetX:target.x,targetY:target.y,type:tower.type,stats,source:tower,speed:tower.type==='cannon'?310:480 });
           bleep(tower.type==='blaster'?'shot':tower.type);
         }
       } else tower.cooldown=Math.max(0,tower.cooldown);
@@ -323,15 +460,27 @@
       if (dist<=shot.speed*dt+5) {
         shot.done=true;
         if (shot.stats.splash) {
-          burst(shot.targetX,shot.targetY,'#ffcc7b',12);
-          for (const enemy of state.enemies) if (enemy.hp>0 && (enemy.x-shot.targetX)**2+(enemy.y-shot.targetY)**2<=shot.stats.splash**2) hitEnemy(enemy,shot.stats.damage,shot.stats);
-        } else if (shot.target.hp>0) hitEnemy(shot.target,shot.stats.damage,shot.stats);
+          splashAt(shot.targetX,shot.targetY,shot.stats.splash,shot.stats.damage,shot.stats,shot.source);
+          if (shot.stats.cluster) {
+            const cluster = shot.stats.cluster;
+            for (let i = 0; i < cluster.count; i++) {
+              const angle = i * Math.PI * 2 / cluster.count;
+              state.blasts.push({ x:shot.targetX+Math.cos(angle)*cluster.offset,y:shot.targetY+Math.sin(angle)*cluster.offset,
+                radius:cluster.radius,damage:cluster.damage,delay:.12+i*.05 });
+            }
+          }
+        } else if (shot.target.hp>0) hitEnemy(shot.target,shot.stats.damage,shot.stats,shot.source);
       } else { shot.x+=dx/dist*shot.speed*dt; shot.y+=dy/dist*shot.speed*dt; }
     }
     state.projectiles=state.projectiles.filter(p=>!p.done);
+    for (const blast of state.blasts) {
+      blast.delay -= dt;
+      if (blast.delay <= 0 && !blast.done) { splashAt(blast.x,blast.y,blast.radius,blast.damage); blast.done = true; }
+    }
+    state.blasts = state.blasts.filter(blast => !blast.done);
     state.enemies=state.enemies.filter(e=>e.hp>0);
     if (!state.spawnQueue.length && !state.enemies.length) {
-      state.projectiles=[];
+      state.projectiles=[]; state.blasts=[];
       if (state.wave===state.level.waves.length) finish(true);
       else {
         state.phase='build'; state.coins+=15; recordProgress(false); uiDirty=true;
@@ -355,14 +504,25 @@
     panel.classList.toggle('has-tower',!!selectedTower);
     $('upgrade-controls').hidden = !selectedTower;
     if (selectedTower) {
-      const def=TOWERS[selectedTower.type],stats=towerStats(selectedTower),max=selectedTower.level===2;
-      $('selection-name').textContent=def.name; $('selection-badge').textContent=`LEVEL ${selectedTower.level+1} / 3`;
-      $('selection-description').textContent=max?'Maximum power. A very proud member of your crew.':`Upgrade for stronger ${selectedTower.type==='frost'?'slowing and longer range':'shots and longer range'}.`;
-      $('tower-stats').textContent=`${stats.damage} damage · ${(1/stats.cooldown).toFixed(1)} shots/sec${stats.splash?' · splash':stats.slow?` · ${Math.round((1-stats.slow)*100)}% slow`:''}`;
+      const def=TOWERS[selectedTower.type],stats=towerStats(selectedTower),max=selectedTower.level===2,branch=def.branches[selectedTower.branch];
+      $('selection-name').textContent=branch?`${def.name} · ${branch.name}`:def.name;
+      $('selection-badge').textContent=branch?'SPECIALIZED':`LEVEL ${selectedTower.level+1} / 3`;
+      $('selection-description').textContent=branch?branch.hint:max?'Two upgrades complete. Choose one final specialization.':`Upgrade for stronger ${selectedTower.type==='frost'?'slowing and longer range':'shots and longer range'}.`;
+      $('tower-stats').textContent=`${stats.damage} damage · ${(1/stats.cooldown).toFixed(1)} ${stats.aura?'pulses':'shots'}/sec${stats.cluster?' · 3 mini-blasts':stats.freezeEvery?' · every 3rd hit freezes':stats.splash?` · ${stats.splash}px splash`:stats.slow?` · ${Math.round((1-stats.slow)*100)}% slow`:''}`;
       const cost=def.upgrades[selectedTower.level];
-      $('upgrade-button').textContent=max?'Fully upgraded':`Upgrade · ${cost} coins`;
+      $('upgrade-button').hidden=max;
+      $('upgrade-button').textContent=`Upgrade · ${cost || 0} coins`;
       $('upgrade-button').disabled=max || state.coins<cost || state.paused || !isPlaying();
-      $('sell-button').textContent=`Recycle +${Math.floor(selectedTower.invested*.65)}`;
+      $('branch-controls').hidden=!max||!!branch;
+      for(const [index,[id,choice]] of Object.entries(def.branches).entries()){
+        const button=$('branch-controls').querySelector(`[data-branch-choice="${index}"]`);
+        button.dataset.branch=id;button.querySelector('strong').textContent=choice.name;
+        button.querySelector('span').textContent=`${choice.cost} coins`;
+        button.querySelector('small').textContent=choice.hint;
+        button.setAttribute('aria-label',`${choice.name}, ${choice.cost} coins. ${choice.hint} Final choice for this tower.`);
+        button.disabled=!!branch||!max||state.coins<choice.cost||state.paused||!isPlaying();
+      }
+      $('sell-button').textContent=`Recycle +${sellRefund(selectedTower)}`;
       $('sell-button').disabled=state.paused || !isPlaying();
     } else {
       $('selection-name').textContent=`${TOWERS[selectedType].name} selected`; $('selection-badge').textContent='BUILD';
@@ -376,7 +536,7 @@
     $('start-wave-button').disabled=state.phase!=='build'||state.paused;
     const next=state.level.waves[state.wave];
     $('start-wave-label').textContent=state.paused?'Mission paused':state.phase==='wave'?`Wave ${state.wave} in progress`:state.phase==='won'?'Base protected!':state.phase==='lost'?'Ready for a fresh start':`Start wave ${state.wave+1}`;
-    $('next-wave-label').textContent=state.paused?'Resume whenever you’re ready':state.phase==='wave'?`${state.enemies.length+state.spawnQueue.length} bots remaining`:next?`${next[0]} bots incoming${state.level.boss&&state.wave===19?' + big boss':''}`:'Great teamwork, commander';
+    $('next-wave-label').textContent=state.paused?'Resume whenever you’re ready':state.phase==='wave'?`${state.enemies.length+state.spawnQueue.length} bots remaining`:next?`${waveCount(next)} bots incoming${waveHasBoss(next)?' · big boss finale':''}`:'Great teamwork, commander';
     $('board-status').textContent=state.paused?'PAUSED · TAKE YOUR TIME':state.phase==='wave'?`WAVE ${state.wave} · PROTECT YOUR BASE`:state.phase==='build'?'BUILD PHASE · MAKE YOUR PLAN':state.phase==='won'?'MISSION COMPLETE · NICE TEAMWORK':'THE CREW BELIEVES IN YOU';
     updateSelection(); uiDirty=false;
   }
@@ -404,49 +564,137 @@
     roundRect(-22,-12,44,35,9,'#45667d','#0b1b2a',3);roundRect(-24,17,48,8,4,'#0b1b2a');
     circle(0,-2,19,color,'#0b1b2a',3);circle(-5,-8,7,'#ffffff20');
     if(tower.type==='frost'){
-      ctx.strokeStyle='#e6fcff';ctx.lineWidth=3;ctx.lineCap='round';
-      for(let i=0;i<3;i++){const a=i*Math.PI/3;ctx.beginPath();ctx.moveTo(Math.cos(a)*13,Math.sin(a)*13-2);ctx.lineTo(-Math.cos(a)*13,-Math.sin(a)*13-2);ctx.stroke();}
-      circle(0,-2,5,'#4b9fbc');
+      if(tower.branch==='deepfreeze'){
+        polygon(ctx,[[0,-26],[14,-5],[0,15],[-14,-5]],'#d8faff','#276884',2);
+        ctx.strokeStyle='#67bbd2';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,-24);ctx.lineTo(0,13);ctx.moveTo(-12,-5);ctx.lineTo(12,-5);ctx.stroke();
+      }else{
+        ctx.strokeStyle='#e6fcff';ctx.lineWidth=3;ctx.lineCap='round';
+        for(let i=0;i<3;i++){const a=i*Math.PI/3;ctx.beginPath();ctx.moveTo(Math.cos(a)*13,Math.sin(a)*13-2);ctx.lineTo(-Math.cos(a)*13,-Math.sin(a)*13-2);ctx.stroke();}
+        circle(0,-2,5,'#4b9fbc');
+        if(tower.branch==='blizzard'){circle(0,-2,25,null,'#c4f5ff',2);for(let i=0;i<3;i++)circle(Math.cos(i*Math.PI*2/3)*25,Math.sin(i*Math.PI*2/3)*25-2,4,'#c4f5ff','#276884',1);}
+      }
     }else{
-      ctx.save();ctx.rotate(tower.angle);roundRect(1-recoil,-(tower.type==='cannon'?8:6),29,tower.type==='cannon'?16:12,4,'#0b1b2a');roundRect(4-recoil,-(tower.type==='cannon'?5:3),24,tower.type==='cannon'?10:6,2,tower.type==='cannon'?'#ffcf89':'#ddffa5');ctx.restore();
+      ctx.save();ctx.rotate(tower.angle);
+      if(tower.branch==='gatling'){
+        for(const y of [-7,7]){roundRect(1-recoil,y-4,29,8,3,'#0b1b2a');roundRect(4-recoil,y-2,26,4,1,'#ddffa5');}
+      }else if(tower.branch==='longshot'){
+        roundRect(1-recoil,-5,40,10,3,'#0b1b2a');roundRect(4-recoil,-2,35,4,1,'#ddffa5');roundRect(29-recoil,-8,5,16,2,'#ddffa5','#0b1b2a',2);
+      }else if(tower.branch==='bigsplash'){
+        polygon(ctx,[[3,-7],[30,-14],[30,14],[3,7]],'#ffcf89','#0b1b2a',3);roundRect(26,-15,7,30,2,'#0b1b2a');
+      }else if(tower.branch==='cluster'){
+        for(const y of [-11,0,11]){roundRect(5-recoil,y-4,24,8,3,'#ffcf89','#0b1b2a',2);circle(26-recoil,y,2,'#0b1b2a');}
+      }else{roundRect(1-recoil,-(tower.type==='cannon'?8:6),29,tower.type==='cannon'?16:12,4,'#0b1b2a');roundRect(4-recoil,-(tower.type==='cannon'?5:3),24,tower.type==='cannon'?10:6,2,tower.type==='cannon'?'#ffcf89':'#ddffa5');}
+      ctx.restore();
     }
     for(let i=0;i<=tower.level;i++)circle((i-tower.level/2)*8,19,2.3,color);
+    if(tower.branch){circle(18,19,8,'#0b1b2a',color,1);ctx.fillStyle=color;ctx.font='bold 11px system-ui';ctx.textAlign='center';ctx.fillText(TOWERS[tower.type].branches[tower.branch].emblem,18,23);}
     if(selectedTower===tower){ctx.strokeStyle=color;ctx.lineWidth=2;ctx.setLineDash([4,4]);ctx.strokeRect(-27,-28,54,56);ctx.setLineDash([]);}
     ctx.restore();
   }
+  function paintRect(context,x,y,w,h,r,fill,stroke,line=1) {
+    context.beginPath();context.roundRect(x,y,w,h,r);
+    if(fill){context.fillStyle=fill;context.fill();}if(stroke){context.strokeStyle=stroke;context.lineWidth=line;context.stroke();}
+  }
+  function paintCircle(context,x,y,r,fill,stroke,line=1) {
+    context.beginPath();context.arc(x,y,r,0,Math.PI*2);
+    if(fill){context.fillStyle=fill;context.fill();}if(stroke){context.strokeStyle=stroke;context.lineWidth=line;context.stroke();}
+  }
+  function polygon(context,points,fill,stroke='#132537',line=3) {
+    context.beginPath();points.forEach(([x,y],i)=>i?context.lineTo(x,y):context.moveTo(x,y));context.closePath();
+    if(fill){context.fillStyle=fill;context.fill();}if(stroke){context.strokeStyle=stroke;context.lineWidth=line;context.stroke();}
+  }
+  function drawKindSilhouette(context,kind,fill) {
+    context.lineJoin='round';context.lineCap='round';
+    const outline='#132537';
+    switch(kind.shape){
+      case 'triangle': polygon(context,[[-20,17],[0,-21],[20,17]],fill);break;
+      case 'wide': paintRect(context,-25,-14,50,33,8,fill,outline,3);break;
+      case 'tall': paintRect(context,-12,-22,24,40,8,fill,outline,3);break;
+      case 'dart': polygon(context,[[-24,13],[0,-20],[24,13],[0,6]],fill);break;
+      case 'hexagon': polygon(context,[[-21,-9],[-11,-20],[12,-20],[22,-8],[19,14],[0,21],[-20,14]],fill);break;
+      case 'square': paintRect(context,-21,-20,42,40,3,fill,outline,3);break;
+      case 'double': paintRect(context,-24,-16,26,35,12,fill,outline,3);paintRect(context,-2,-16,26,35,12,fill,outline,3);break;
+      case 'diamond': polygon(context,[[0,-15],[15,0],[0,15],[-15,0]],fill);break;
+      case 'round': paintCircle(context,0,0,18,fill,outline,3);break;
+      case 'giant': paintRect(context,-26,-20,52,43,10,fill,outline,3);break;
+      default: paintRect(context,-18,-14,36,32,9,fill,outline,3);
+    }
+    context.strokeStyle=outline;context.lineWidth=3;context.lineCap='round';
+    switch(kind.accessory){
+      case 'antenna': context.beginPath();context.moveTo(0,-15);context.lineTo(0,-24);context.stroke();paintCircle(context,0,-26,3,fill,outline,2);break;
+      case 'dish': context.beginPath();context.moveTo(0,-19);context.lineTo(4,-27);context.arc(4,-29,8,0,Math.PI);context.stroke();break;
+      case 'shoulders': paintRect(context,-30,-9,9,19,3,fill,outline,3);paintRect(context,21,-9,9,19,3,fill,outline,3);break;
+      case 'legs': context.beginPath();context.moveTo(-7,16);context.lineTo(-14,24);context.lineTo(-8,28);context.moveTo(7,16);context.lineTo(14,24);context.lineTo(8,28);context.stroke();break;
+      case 'fins': polygon(context,[[-18,9],[-28,17],[-22,0]],fill);polygon(context,[[18,9],[28,17],[22,0]],fill);break;
+      case 'shield': polygon(context,[[3,8],[18,5],[18,18],[10,25],[2,17]],'#a4b5be',outline,2);break;
+      case 'rivets': for(const x of [-16,16])for(const y of [-15,15])paintRect(context,x-2,y-2,4,4,1,'#e0d1af');break;
+      case 'seam': context.beginPath();context.moveTo(0,-16);context.lineTo(-3,-10);context.lineTo(3,10);context.lineTo(0,18);context.stroke();break;
+      case 'stub': paintRect(context,-3,-20,6,5,1,fill,outline,2);break;
+      case 'feelers': context.beginPath();context.moveTo(-9,-14);context.lineTo(-20,-24);context.moveTo(9,-14);context.lineTo(20,-24);context.stroke();paintCircle(context,-20,-24,3,fill);paintCircle(context,20,-24,3,fill);break;
+      case 'crown': polygon(context,[[-16,-20],[-19,-34],[-6,-27],[0,-38],[7,-27],[19,-34],[16,-20]],'#ffe697',outline,2);break;
+    }
+    const visorWidth=kind.shape==='diamond'?17:kind.shape==='tall'?21:27;
+    paintRect(context,-visorWidth/2,-6,visorWidth,11,4,'#173040',outline,2);
+    paintRect(context,-8,-3,3,5,1,'#baf7ff');paintRect(context,5,-3,3,5,1,'#baf7ff');
+  }
   function drawEnemy(enemy) {
-    const big=enemy.kind==='boss', scale=big?1.6:enemy.kind==='armored'?1.1:.85;
-    const bob=reducedMotion?0:Math.sin(state.clock*11+enemy.wobble)*1.5;
-    ctx.save();ctx.translate(enemy.x,enemy.y+bob);ctx.scale(scale,scale);
-    ctx.fillStyle='#09142444';ctx.beginPath();ctx.ellipse(0,18,18,6,0,0,Math.PI*2);ctx.fill();
-    const color=enemy.flash?'#fff7cc':enemy.slowTime?'#a6dcef':big?'#f69464':enemy.kind==='armored'?'#b7a1a0':enemy.kind==='runner'?'#ffd179':'#ffae59';
-    const legMove=reducedMotion?0:Math.sin(state.clock*13+enemy.wobble)*3;
-    roundRect(-12,9+legMove,8,12,3,'#172638');roundRect(4,9-legMove,8,12,3,'#172638');
-    roundRect(-19,-14,38,32,9,color,'#132537',3);
-    if(enemy.kind==='armored')roundRect(-21,-17,42,8,3,'#637788','#132537',2);
-    roundRect(-14,-6,28,12,5,'#173040','#132537',2);
-    roundRect(-9,-3,4,6,1,'#baf7ff');roundRect(5,-3,4,6,1,'#baf7ff');
-    ctx.strokeStyle=color;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(0,-15);ctx.lineTo(0,-22);ctx.stroke();circle(0,-23,3,big?'#bef264':'#ef535d');
-    if(big){ctx.fillStyle='#ffe697';ctx.beginPath();ctx.moveTo(-12,-18);ctx.lineTo(-15,-30);ctx.lineTo(-4,-25);ctx.lineTo(0,-34);ctx.lineTo(5,-25);ctx.lineTo(15,-30);ctx.lineTo(12,-18);ctx.fill();}
-    if(enemy.kind==='runner'){ctx.strokeStyle='#f5eac4';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-23,-1);ctx.lineTo(-28,-1);ctx.moveTo(-22,6);ctx.lineTo(-26,6);ctx.stroke();}
-    if(enemy.hp<enemy.maxHp || big){roundRect(-20,-37,40,5,2,'#0c1929');roundRect(-19,-36,38*Math.max(0,enemy.hp/enemy.maxHp),3,1,enemy.slowTime?'#a4efff':'#bef264');}
+    const kind=ENEMY_KINDS[enemy.kind],big=kind.id==='boss',scale=kind.renderScale;
+    const bob=reducedMotion||enemy.freezeTime>0?0:Math.sin(state.clock*11+enemy.wobble)*1.5;
+    ctx.save();ctx.translate(enemy.x+enemy.formationOffset,enemy.y+bob);ctx.scale(scale,scale);
+    ctx.fillStyle='#09142444';ctx.beginPath();ctx.ellipse(0,21,big?27:20,6,0,0,Math.PI*2);ctx.fill();
+    kind.renderer(ctx,kind,enemy.flash?'#fff7cc':enemy.freezeTime>0?'#d6fbff':enemy.slowTime?'#a6dcef':enemy.armor?'#b7a1a0':'#ffae59');
+    if(enemy.freezeTime>0)polygon(ctx,[[0,-31],[26,-12],[25,22],[0,31],[-25,22],[-26,-12]],'#a4efff22','#d6fbff',2);
+    if(enemy.hp<enemy.maxHp||big){paintRect(ctx,-20,big?-45:-37,40,5,2,'#0c1929');paintRect(ctx,-19,big?-44:-36,38*Math.max(0,enemy.hp/enemy.maxHp),3,1,enemy.slowTime?'#a4efff':'#bef264');}
     ctx.restore();
+  }
+  function tileHash(levelId,c,r) {
+    let hash=Math.imul(levelId+1,0x9e3779b1)^Math.imul(c+11,0x85ebca6b)^Math.imul(r+23,0xc2b2ae35);
+    hash=Math.imul(hash^(hash>>>16),0x45d9f3b);return (hash^(hash>>>16))>>>0;
+  }
+  function decorationPlan(level) {
+    const tiles=[];
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(!level.pathSet.has(`${c},${r}`))tiles.push({c,r,seed:tileHash(level.id,c,r)});
+    const pond=level.theme.decorSet.includes('pond')?tiles.reduce((best,tile)=>!best||tile.seed<best.seed?tile:best,null):null;
+    const kinds=level.theme.decorSet.filter(kind=>kind!=='pond');
+    return tiles.filter(tile=>tile===pond||tile.seed%100<48).map(tile=>({...tile,kind:tile===pond?'pond':kinds[tile.seed%kinds.length],
+      x:(tile.c+.5)*CELL+(tile.seed%13)-6,y:(tile.r+.5)*CELL+((tile.seed>>>8)%13)-6,scale:.75+((tile.seed>>>16)%25)/100}));
+  }
+  function drawDecoration(context,decor) {
+    context.save();context.translate(decor.x,decor.y);context.scale(decor.scale,decor.scale);
+    switch(decor.kind){
+      case 'crater': context.beginPath();context.ellipse(0,3,18,11,0,0,Math.PI*2);context.fillStyle='#10283d';context.fill();context.strokeStyle='#3a5263';context.lineWidth=3;context.stroke();context.beginPath();context.ellipse(3,6,10,5,0,0,Math.PI);context.stroke();break;
+      case 'rock': polygon(context,[[-17,11],[-13,-7],[1,-14],[17,1],[13,13]],'#3a5264','#263e51',2);polygon(context,[[-13,-7],[1,-14],[2,7]],'#4b6271',null);break;
+      case 'stars': for(const [x,y] of [[-12,-5],[9,8]]){context.strokeStyle='#b2d2db66';context.lineWidth=2;context.beginPath();context.moveTo(x-4,y);context.lineTo(x+4,y);context.moveTo(x,y-4);context.lineTo(x,y+4);context.stroke();}break;
+      case 'tree': paintRect(context,-3,4,6,16,2,'#826448');polygon(context,[[-17,9],[0,-21],[17,9]],'#42794c','#234b37',2);polygon(context,[[-13,-2],[0,-25],[13,-2]],'#5b8d55',null);break;
+      case 'bush': paintCircle(context,-8,4,10,'#426c44');paintCircle(context,5,1,13,'#52814d');paintCircle(context,15,7,8,'#416c44');break;
+      case 'flower': for(const [x,y] of [[-10,5],[9,-4],[10,13]]){context.strokeStyle='#5d8c51';context.lineWidth=2;context.beginPath();context.moveTo(x,y+7);context.lineTo(x,y);context.stroke();paintCircle(context,x,y,4,'#e5c77c');paintCircle(context,x,y,1.5,'#ba855b');}break;
+      case 'pond': context.beginPath();context.ellipse(0,1,23,16,-.3,0,Math.PI*2);context.fillStyle='#78a287';context.fill();context.beginPath();context.ellipse(0,0,19,12,-.3,0,Math.PI*2);context.fillStyle='#47938f';context.fill();context.strokeStyle='#96c8b6';context.lineWidth=2;context.beginPath();context.moveTo(-9,-3);context.lineTo(2,-3);context.moveTo(3,4);context.lineTo(11,4);context.stroke();break;
+      case 'glowrock': paintCircle(context,0,0,22,'#ffb3590d');polygon(context,[[-14,13],[-9,-10],[3,-19],[16,2],[10,14]],'#5d4c48','#ab7953',2);context.strokeStyle='#f2b55b';context.lineWidth=2;context.beginPath();context.moveTo(3,-14);context.lineTo(-3,1);context.lineTo(8,8);context.stroke();break;
+      case 'twistedtree': context.strokeStyle='#28292d';context.lineWidth=6;context.lineCap='round';context.beginPath();context.moveTo(2,21);context.lineTo(-4,4);context.lineTo(4,-12);context.lineTo(-3,-24);context.moveTo(-2,0);context.lineTo(-16,-7);context.lineTo(-19,-17);context.moveTo(2,-7);context.lineTo(17,-13);context.lineTo(19,-23);context.stroke();break;
+      case 'ember': polygon(context,[[-18,8],[-4,-10],[17,4],[12,13]],'#423936',null);for(const [x,y] of [[-5,3],[8,6]])paintRect(context,x,y,4,2,1,'#d48b50');break;
+    }
+    context.restore();
+  }
+  function renderTheme(context,level) {
+    context.save();context.globalAlpha=1;context.globalCompositeOperation='source-over';context.lineCap='butt';context.lineJoin='miter';context.setLineDash([]);
+    const theme=level.theme;
+    context.fillStyle=theme.bgTint;context.fillRect(0,0,WIDTH,HEIGHT);
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(!level.pathSet.has(`${c},${r}`)){
+      paintRect(context,c*CELL+3,r*CELL+3,CELL-6,CELL-6,7,(c+r)%2?theme.tileB:theme.tileA);
+      paintCircle(context,c*CELL+9,r*CELL+9,1.1,'#c7d8c326');
+    }
+    // Decorations are a precomputed pure hash plan, never occupancy or collision data.
+    for(const decor of level.decorations)drawDecoration(context,decor);
+    context.beginPath();level.path.forEach((p,i)=>{const x=(p.c+.5)*CELL,y=(p.r+.5)*CELL;i?context.lineTo(x,y):context.moveTo(x,y);});
+    context.lineJoin='round';context.lineCap='round';context.strokeStyle=theme.pathBorder;context.lineWidth=49;context.stroke();
+    context.strokeStyle=theme.pathColor;context.lineWidth=42;context.stroke();
+    context.strokeStyle=theme.pathBorder;context.lineWidth=2;context.setLineDash([3,12]);context.stroke();context.setLineDash([]);
+    context.restore();
   }
   function draw() {
     if(!state)return;
     ctx.clearRect(0,0,WIDTH,HEIGHT);
-    ctx.fillStyle='#142a3e';ctx.fillRect(0,0,WIDTH,HEIGHT);
-    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-      const path=state.level.pathSet.has(`${c},${r}`);
-      if(!path){roundRect(c*CELL+3,r*CELL+3,CELL-6,CELL-6,7,(c+r)%2?'#1b3449':'#193146');
-        circle(c*CELL+9,r*CELL+9,1.1,'#496074');
-        if((c*7+r*11)%19===0&&!towerAt(c,r)){roundRect(c*CELL+32,r*CELL+33,12,7,3,'#263f52');roundRect(c*CELL+25,r*CELL+40,8,5,2,'#29485b');}
-      }
-    }
-    // One continuous route, shared by drawing and movement.
-    ctx.beginPath();state.level.path.forEach((p,i)=>{const x=(p.c+.5)*CELL,y=(p.r+.5)*CELL;i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
-    ctx.lineJoin='round';ctx.lineCap='round';ctx.strokeStyle='#607d80';ctx.lineWidth=49;ctx.stroke();ctx.strokeStyle='#b9c8ac';ctx.lineWidth=42;ctx.stroke();
-    ctx.strokeStyle='#9ba98f';ctx.lineWidth=2;ctx.setLineDash([3,12]);ctx.stroke();ctx.setLineDash([]);
+    renderTheme(ctx,state.level);
     const first=state.level.path[0];
     circle((first.c+.5)*CELL,(first.r+.5)*CELL,21,'#263747','#ffae59',3);circle((first.c+.5)*CELL,(first.r+.5)*CELL,12,'#e88d4450');
     ctx.fillStyle='#ffd4a2';ctx.font='bold 18px system-ui';ctx.textAlign='center';ctx.fillText('›',(first.c+.5)*CELL,(first.r+.5)*CELL+6);
@@ -458,6 +706,8 @@
       roundRect(tile.c*CELL+4,tile.r*CELL+4,52,52,7,valid?'#bef26416':'#ef535d20',valid?'#bef264':'#ef535d',2);
       if(valid&&!existing&&!selectedTower)circle((tile.c+.5)*CELL,(tile.r+.5)*CELL,TOWERS[selectedType].stats[0].range,'#bef26408','#bef26433',1);
     }
+    for(const ring of state.rings){ctx.globalAlpha=Math.min(.6,ring.life/ring.maxLife);circle(ring.x,ring.y,ring.radius*(1-ring.life/ring.maxLife*.25),null,ring.color,2);}
+    ctx.globalAlpha=1;
     state.towers.forEach(drawTower);
     [...state.enemies].sort((a,b)=>a.y-b.y).forEach(drawEnemy);
     for(const p of state.projectiles){circle(p.x,p.y,p.type==='cannon'?5:p.type==='frost'?4:3,COLORS[p.type]);circle(p.x,p.y,p.type==='cannon'?2:1.5,'#fffbe8');}
@@ -508,6 +758,7 @@
   });
   $('tile-action').addEventListener('click',()=>{const[c,r]=$('tile-select').value.split(',').map(Number);activateTile(c,r);});
   $('tile-select').addEventListener('change',()=>{const[c,r]=$('tile-select').value.split(',').map(Number);keyboardTile={c,r};keyboardFocus=true;$('tile-description').textContent=`Row ${r+1}, column ${c+1}. ${towerAt(c,r)?'Select to inspect this tower.':`Select to build a ${TOWERS[selectedType].name}.`}`;});
+  $('branch-controls').addEventListener('click',event=>{const button=event.target.closest('[data-branch]');if(button&&!button.disabled)chooseBranch(button.dataset.branch);});
   $('upgrade-button').addEventListener('click',upgradeTower);$('sell-button').addEventListener('click',sellTower);
   $('start-wave-button').addEventListener('click',startWave);$('pause-button').addEventListener('click',()=>togglePause());$('resume-button').addEventListener('click',()=>togglePause(false));
   $('missions-button').addEventListener('click',showMissions);$('result-missions').addEventListener('click',showMissions);
@@ -533,8 +784,11 @@
   // Opt-in deterministic test harness. Absent on normal game URLs; never shown in the UI.
   if(new URLSearchParams(location.search).has('test')){
     window.__crewmateTest={
-      levels:LEVELS,towers:TOWERS,
-      snapshot:()=>state?{level:state.level.id,phase:state.phase,paused:state.paused,coins:state.coins,lives:state.lives,wave:state.wave,kills:state.kills,leaked:state.leaked,bossSpawned:state.bossSpawned,enemies:state.enemies.map(e=>({...e})),towers:state.towers.map(t=>({...t})),queue:state.spawnQueue.length,save:JSON.parse(JSON.stringify(save))}:{save:JSON.parse(JSON.stringify(save))},
+      levels:LEVELS,towers:TOWERS,enemyKinds:ENEMY_KINDS,
+      getTowerStats:towerStats,getSellRefund:sellRefund,makeWaveQueue,waveCount,
+      spawnEnemy,hitEnemy,chooseBranch,decorationPlan,tileHash,renderTheme,
+      decorForTile:(level,c,r)=>decorationPlan(level).find(decor=>decor.c===c&&decor.r===r)||null,
+      snapshot:()=>state?{level:state.level.id,phase:state.phase,paused:state.paused,coins:state.coins,lives:state.lives,wave:state.wave,kills:state.kills,leaked:state.leaked,bossSpawned:state.bossSpawned,blasts:state.blasts.map(b=>({...b})),enemies:state.enemies.map(e=>({...e})),towers:state.towers.map(t=>({...t})),queue:state.spawnQueue.length,save:JSON.parse(JSON.stringify(save))}:{save:JSON.parse(JSON.stringify(save))},
       step:seconds=>{for(let t=0;t<seconds;t+=.02)update(Math.min(.02,seconds-t));updateUI();draw();},
       startLevel,startWave,selectType,activateTile,upgradeTower,sellTower,togglePause,
       inspect:()=>state
