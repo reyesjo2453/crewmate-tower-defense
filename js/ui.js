@@ -24,7 +24,8 @@
   function show(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.toggle('hidden', s.id !== 's-' + id));
     current = id; if (id !== 'game' && G) { G.stop(); }
-    if (id === 'title') Sound.mood(0);
+    if (id === 'title' || id === 'hub' || id === 'log' || id === 'set') Sound.mood('title');
+    else if (id === 'dialog' || id === 'intro') Sound.mood('story');
   }
 
   /* ---------- Animated starfield backdrops ---------- */
@@ -225,7 +226,7 @@
     lvl.waves.forEach(w => w.spawns.forEach(s => { save.seen[s.type] = true; })); persist();
     G.start(lvl, save.diff, { autoWaves: !runTut });
     buildCards(); lastHud = {}; fit(); G.run(); hud(true);
-    Sound.mood(1); if (save.music) Sound.startMusic();
+    Sound.mood('battle'); Sound.intensity(0); Sound.danger(0); if (save.music) Sound.startMusic();
     $('tut').classList.add('hidden'); $('unitPanel').classList.add('hidden'); $('radio').classList.add('hidden'); clearTimeout(radioPend); clearTimeout(radioT);
     tut = null; G.frozen = false;
     if (runTut) tut = new Tutorial(); else showBanner('Deploy your crew', 'then press START', false);
@@ -270,7 +271,7 @@
         case 'sfx': Sound.play(d); break;
         case 'deny': if (current === 'game') { tip(d); Sound.play('deny'); } break;
         case 'wave':
-          showBanner(d.last ? 'FINAL WAVE' : 'WAVE ' + d.n + ' / ' + d.total, d.last ? 'Hold the line!' : '', d.last); if (d.last) Sound.mood(2);
+          showBanner(d.last ? 'FINAL WAVE' : 'WAVE ' + d.n + ' / ' + d.total, d.last ? 'Hold the line!' : '', d.last); 
           if (d.radio) { clearTimeout(radioPend); radioPend = setTimeout(() => radio(d.radio[0], d.radio[1]), 1200); } break;
         case 'boss': showBanner('⚠ BOSS', d.name, true); break;
         case 'boss-call': tip('The Hollow calls for backup!'); break;
@@ -312,7 +313,20 @@
     const sub = G.state === 'prep' ? 'Get ready' : (G.foes.length + G.queue.length) + ' foes';
     if (L.sub !== sub) { $('waveSub').textContent = sub; L.sub = sub; }
   }
-  function frame() { if (current !== 'game') return; hud(); updatePanel(); if (tut) tut.tick(); }
+  function frame() { if (current !== 'game') return; hud(); updatePanel(); if (tut) tut.tick(); music(); }
+  // adaptive soundtrack: layers follow how hot the fight is
+  function music() {
+    if (G.state === 'won' || G.state === 'lost' || G.state === 'stopped') return;
+    let near = 0, boss = false;
+    for (const f of G.foes) { const p = f.d / f.r.len; if (p > near) near = p; if (f.def.boss) boss = true; }
+    Sound.mood(boss ? 'boss' : 'battle');
+    const n = G.foes.length, last = G.waveIdx === G.level.waves.length - 1;
+    let lv = G.state === 'prep' ? 0 : n === 0 ? 1 : n < 5 ? 2 : 3;
+    if (last && n > 0) lv = 3;
+    Sound.intensity(lv);
+    const low = G.lives <= Math.max(1, Math.floor(G.maxLives * 0.3)) && G.state === 'playing' ? 0.45 : 0;
+    Sound.danger(Math.max((near - 0.55) / 0.4, low));
+  }
 
   $('btnNext').onclick = () => { Sound.ensure(); if (!G.allow({ kind: 'next' })) { tip('Follow the Captain first!'); return; } if (G.callNextWave()) Sound.play('click'); };
   $('btnSpeed').onclick = () => { G.setSpeed(G.speed === 1 ? 2 : 1); $('btnSpeed').innerHTML = G.speed + '&times;'; Sound.play('click'); };

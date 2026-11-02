@@ -31,6 +31,19 @@ Foes include Vent Crawlers, Mimics, Wisp Ghosts (flying), Sabotage Drones (flyin
 
 Mission 1 is a hand-held **tutorial** with Captain Juno (replayable in Settings).
 
+## Soundtrack
+
+An original, adaptive score synthesized live in `js/audio.js` (no audio files): a tense D-minor theme in the spirit of the "hide and seek" style of space-thriller music.
+
+- **Title / map:** slow pads, a bell melody, a low drone.
+- **Story scenes:** quiet pads and distant bells.
+- **Battle** is layered and follows the fight: a ticking clock before the wave, then a pulsing bass, then four-on-the-floor drums and 16th-note arpeggios, then the full lead melody when the field is crowded or on the final wave.
+- **Heartbeat:** fades in and speeds up as foes get close to the reactor or the ship's health runs low.
+- **Bosses** switch to a faster, darker groove with brass stabs and risers.
+- **Victory and defeat** each get a short sting.
+
+`Sound.preview(mood, intensity, danger, seconds)` renders any mood offline, which is handy for tuning the mix.
+
 ## Controls
 
 Touch / mouse: tap a card → tap a glowing tile; tap a crewmate for its menu. Keyboard: `1`–`6` pick crew, `Space` start/next wave, `P` pause, `Esc` cancel. The game plays best in **landscape**; it works in portrait with smaller tiles.
