@@ -1,13 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#0f172a"/>
-  <circle cx="256" cy="256" r="183" fill="#152f43"/>
-  <circle cx="256" cy="256" r="153" fill="none" stroke="#314c60" stroke-width="3" stroke-dasharray="7 16"/>
-  <path d="m369 124 5-17 5 17 17 5-17 5-5 17-5-17-17-5Z" fill="#bef264"/>
-  <rect x="132" y="219" width="55" height="112" rx="19" fill="#c73955" stroke="#0f172a" stroke-width="14"/>
-  <path d="M172 326v56h58v-48h41v48h59V208c0-100-158-100-158 0Z" fill="#ef535d" stroke="#0f172a" stroke-width="15" stroke-linejoin="round"/>
-  <path d="M193 195c0-30 25-43 50-43" fill="none" stroke="#ff8790" stroke-width="13" stroke-linecap="round"/>
-  <rect x="223" y="196" width="128" height="78" rx="32" fill="#a4efff" stroke="#0f172a" stroke-width="15"/>
-  <path d="M246 216h58" stroke="white" stroke-width="13" stroke-linecap="round"/>
-  <circle cx="370" cy="338" r="40" fill="#bef264" stroke="#0f172a" stroke-width="12"/>
-  <path d="m370 337 20-20" stroke="#0f172a" stroke-width="18" stroke-linecap="round"/>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%"><stop offset="0" stop-color="#2a3a86"/><stop offset="1" stop-color="#070b1c"/></radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#d58bff" stop-opacity=".55"/><stop offset="1" stop-color="#d58bff" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <circle cx="256" cy="270" r="230" fill="url(#glow)"/>
+  <g fill="#cfe0ff"><circle cx="70" cy="90" r="4"/><circle cx="440" cy="70" r="5"/><circle cx="120" cy="420" r="3"/><circle cx="420" cy="400" r="4"/><circle cx="360" cy="140" r="3"/><circle cx="60" cy="250" r="3"/></g>
+  <!-- ghost foe -->
+  <path d="M338 232c0-54 30-80 60-80s60 26 60 80v92l-20-14-20 14-20-14-20 14-20-14-20 14z" fill="#bfe8ff" opacity=".8" stroke="#eafaff" stroke-width="8" stroke-linejoin="round"/>
+  <rect x="380" y="198" width="60" height="38" rx="19" fill="#284678"/>
+  <!-- crewmate -->
+  <g stroke="#0d1018" stroke-width="16" stroke-linejoin="round">
+    <rect x="92" y="246" width="48" height="108" rx="20" fill="#9c1218"/>
+    <path d="M128 392v52h72v-38h36v38h72V270c0-130-180-130-180 0z" fill="#d8232a"/>
+  </g>
+  <path d="M150 240c0-40 30-60 70-62" fill="none" stroke="#ff8f8f" stroke-width="14" stroke-linecap="round"/>
+  <rect x="226" y="212" width="132" height="84" rx="42" fill="#7fd6ee" stroke="#0d1018" stroke-width="16"/>
+  <path d="M252 236h60" stroke="#fff" stroke-width="14" stroke-linecap="round"/>
+  <!-- hard hat -->
+  <path d="M172 186c4-58 118-58 124 0z" fill="#ffcc1f" stroke="#0d1018" stroke-width="14" stroke-linejoin="round"/>
+  <rect x="150" y="180" width="168" height="26" rx="12" fill="#ffcc1f" stroke="#0d1018" stroke-width="14"/>
 </svg>
