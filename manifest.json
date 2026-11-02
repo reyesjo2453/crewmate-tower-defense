@@ -1,17 +1,20 @@
 {
   "id": "./",
-  "name": "Crewmate Craft: Base Defense",
-  "short_name": "Crewmate TD",
-  "description": "A little space base. A very brave crew. Three friendly tower defense adventures, ready offline.",
+  "name": "Crewmate Command: The Hollow Signal",
+  "short_name": "Crewmate Command",
+  "description": "A story-driven tower defense. Deploy your crew, block the creeping Signal, save the HALCYON.",
   "lang": "en",
   "start_url": "./",
   "scope": "./",
-  "display": "standalone",
-  "orientation": "portrait-primary",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#080c1a",
+  "theme_color": "#0a0f1f",
+  "categories": ["games"],
   "icons": [
-    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

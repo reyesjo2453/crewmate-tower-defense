@@ -1,31 +1,29 @@
-/* Bump this version when any precached file changes. All URLs stay in project scope. */
-const CACHE_PREFIX = `crewmate-defense-${new URL(self.registration.scope).pathname}-`;
-const CACHE_NAME = `${CACHE_PREFIX}v2`;
+/* Offline cache. Bump VERSION whenever any cached file changes. */
+const VERSION = 'v3';
+const CACHE_PREFIX = `crewmate-command-${new URL(self.registration.scope).pathname}-`;
+const CACHE_NAME = CACHE_PREFIX + VERSION;
 const SHELL = [
-  './', './index.html', './style.css', './game.js', './manifest.json',
-  './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'
+  './', './index.html', './style.css', './manifest.json',
+  './js/data.js', './js/art.js', './js/audio.js', './js/engine.js', './js/ui.js',
+  './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png'
 ];
-const shellURLs = new Set(SHELL.map(path => new URL(path, self.registration.scope).href));
-
-self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
-self.addEventListener('activate', event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(
-    keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME).map(key => caches.delete(key))
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(keys => Promise.all(
+    keys.filter(k => k.startsWith('crewmate-') && k !== CACHE_NAME && (k.startsWith(CACHE_PREFIX) || k.startsWith('crewmate-defense-'))).map(k => caches.delete(k))
   )).then(() => self.clients.claim()));
 });
-self.addEventListener('fetch', event => {
-  const request = event.request;
-  if (request.method !== 'GET') return;
-  const url = new URL(request.url);
-  if (url.origin !== self.location.origin || !url.href.startsWith(self.registration.scope)) return;
-  if (request.mode === 'navigate') {
-    event.respondWith(caches.open(CACHE_NAME).then(async cache => {
-      const shell = await cache.match(new URL('./index.html', self.registration.scope).href);
-      return shell || fetch(request);
-    }));
-  } else if (shellURLs.has(url.href)) {
-    event.respondWith(caches.open(CACHE_NAME).then(async cache => (await cache.match(request)) || fetch(request)));
-  }
+self.addEventListener('fetch', e => {
+  const r = e.request;
+  if (r.method !== 'GET') return;
+  const u = new URL(r.url);
+  if (u.origin !== location.origin || !u.href.startsWith(self.registration.scope)) return;
+  e.respondWith(caches.open(CACHE_NAME).then(async c => {
+    const hit = await c.match(r, { ignoreSearch: true });
+    if (hit) return hit;
+    if (r.mode === 'navigate') return (await c.match('./index.html')) || fetch(r);
+    return fetch(r);
+  }));
 });
