@@ -37,6 +37,10 @@ const base = (process.env.BASE_URL || 'http://localhost:8000/').replace(/\/?$/, 
       if (!l.pre || !l.post) out.push(`L${l.id}: missing story`);
       [...l.pre, ...l.post].forEach(([w]) => { if (!CAST[w]) out.push(`L${l.id}: unknown speaker ${w}`); });
       if (l.newCrew && !l.crew.includes(l.newCrew)) out.push(`L${l.id}: newCrew not in roster`);
+      const ends = new Set(l.routes.flatMap(r => [r.pts[0], r.pts[r.pts.length - 1]].map(p => p.join(','))));
+      (l.doors || []).forEach(d => { const k = d.join(','); if (!path.has(k)) out.push(`L${l.id}: door ${k} not on a floor path`); if (ends.has(k)) out.push(`L${l.id}: door ${k} on a vent or reactor`); });
+      Object.entries(l.sabo || {}).forEach(([w, k]) => { if (!SABOTAGE[k]) out.push(`L${l.id}: unknown sabotage ${k}`); if (w < 1 || w > l.waves.length) out.push(`L${l.id}: sabotage on missing wave ${w}`); });
+      if (squadSize(l, 'captain') < 1) out.push(`L${l.id}: empty squad`);
     }
     return out;
   });
@@ -89,6 +93,49 @@ const base = (process.env.BASE_URL || 'http://localhost:8000/').replace(/\/?$/, 
   assert.ok(mech.armorChip < 15 && mech.armorChip >= 10, 'armor reduces bullet damage'); assert.equal(mech.elecFull, 40, 'electric ignores armor');
   assert.ok(mech.blocked, 'guard blocks ground foe'); assert.ok(mech.hidden, 'shifter hidden until revealed');
   console.log('mechanics ok');
+
+  // ---- doors & sabotage
+  const hz = await page.evaluate(() => {
+    const g = new Game(null, { emit() { } }); g.start(LEVELS.find(l => l.id === 2), 'captain', {}); g.callNextWave(); g.queue.length = 0; g.foes = []; const r = {};
+    const door = g.doors[0], f = g.spawnFoe('crawler', 0, 0.2); r.deny = !g.canPlace('brick', door.x, door.y).ok;
+    g.tap(door.x, door.y); r.shut = door.t > 0; for (let i = 0; i < 60 * 4; i++) g.update(1 / 60);
+    r.held = Math.floor(f.x / TILE) < door.x; r.again = g.slamDoor(door) === false;
+    for (let i = 0; i < 60 * 6; i++) g.update(1 / 60); r.through = f.dead || Math.floor(f.x / TILE) >= door.x;
+    const b = g.spawnFoe('brute', 0, 0.2); door.cd = 0; g.slamDoor(door); for (let i = 0; i < 60 * 8; i++) g.update(1 / 60); r.bossSmash = door.t === 0 && Math.floor(b.x / TILE) >= door.x;
+    const h = new Game(null, { emit() { } }); h.start(LEVELS.find(l => l.id === 4), 'captain', {}); h.callNextWave(); h.queue.length = 0; h.foes = [];
+    const rook = h.deploy('rook', 2, 2) || (h.dp = 99, h.deploy('rook', 2, 2)); h.startSabotage('lights'); r.dim = h.rangeOf(rook) < CREW.rook.range;
+    const p0 = h.sabo.panels[0], need = h.sabo.need; for (let i = 0; i < need; i++) h.tap(p0.x, p0.y); r.fixed = !h.sabo && h.rangeOf(rook) === CREW.rook.range;
+    h.startSabotage('o2'); h.dp = 20; for (let i = 0; i < 60 * 3; i++) h.update(1 / 60); r.drain = h.dp < 20; h.endSabotage(true);
+    const lives = h.lives; h.startSabotage('reactor'); r.twoPanels = h.sabo.panels.length === 2 && h.sabo.panels[0].x + ',' + h.sabo.panels[0].y !== h.sabo.panels[1].x + ',' + h.sabo.panels[1].y;
+    for (let i = 0; i < 60 * 31; i++) h.update(1 / 60); r.meltdown = lives - h.lives === 2;
+    const q = new Game(null, { emit() { } }); q.start(LEVELS.find(l => l.id === 6), 'captain', { squad: ['rook', 'sparky'] }); r.squad = q.avail.join();
+    return r;
+  });
+  assert.deepEqual(hz, { deny: true, shut: true, held: true, again: true, through: true, bossSmash: true, dim: true, fixed: true, drain: true, twoPanels: true, meltdown: true, squad: 'rook,sparky' });
+  console.log('doors, sabotage & squad mechanics ok');
+
+  // ---- squad screen + wardrobe with real clicks
+  const sq = await ctx.newPage(); sq.on('pageerror', e => errors.push(e.message));
+  await sq.goto(base + '?test'); await sq.waitForFunction(() => window.__t);
+  await sq.evaluate(() => { const s = __t.save(); s.intro = true; s.tutDone = true; for (let i = 1; i <= 4; i++) s.stars[i] = 3; __t.persist(); __t.playLevel(5); });
+  for (let i = 0; i < 30 && await sq.isVisible('#s-dialog'); i++) { await sq.click('#dlgSkip'); await sq.waitForTimeout(60); }
+  await sq.waitForSelector('#s-squad:not(.hidden)');
+  assert.equal(await sq.locator('.pick.on').count(), 4, 'default squad fills 4 seats');
+  assert.ok(await sq.locator('.pick[data-k=echo].on').count(), 'new crewmate is in the squad');
+  await sq.click('.pick[data-k=echo]'); assert.ok(await sq.locator('.pick[data-k=echo].on').count(), 'new crewmate stays');
+  await sq.click('.pick[data-k=tank]'); assert.equal(await sq.locator('.pick.on').count(), 4, 'full squad refuses a 5th');
+  await sq.click('.pick[data-k=brick]'); await sq.click('.pick[data-k=tank]');
+  await sq.click('#sqWard'); await sq.waitForSelector('#s-ward:not(.hidden)');
+  assert.ok(await sq.locator('.item[data-id=crown].lock').count(), 'crown locked at 12 stars');
+  await sq.click('.item[data-slot=hat][data-id=party]'); await sq.click('.item[data-slot=pet][data-id=minibean]');
+  assert.equal(await sq.evaluate(() => lookFor('echo').hat), 'party', 'hat applied');
+  await sq.click('#wBack'); await sq.waitForSelector('#s-squad:not(.hidden)'); await sq.click('#sqGo');
+  await sq.waitForSelector('#s-game:not(.hidden)');
+  const inGame = await sq.evaluate(() => ({ avail: __t.G.avail.slice().sort().join(), cards: document.querySelectorAll('.card').length, look: JSON.parse(localStorage.getItem('crewmate-command-v1')).looks.echo }));
+  assert.equal(inGame.avail, 'echo,rook,sparky,tank', 'squad carried into battle');
+  assert.equal(inGame.cards, 4, 'only the squad gets cards'); assert.deepEqual(inGame.look, { hat: 'party', pet: 'minibean' }, 'looks saved');
+  await sq.evaluate(() => { const g = __t.G; g.dp = 99; g.deploy('rook', 3, 2); g.callNextWave(); g.slamDoor(g.doors[0]); for (const k of Object.keys(SABOTAGE)) { g.startSabotage(k); for (let i = 0; i < 90; i++) g.update(1 / 60); g.render(); g.endSabotage(true); } });
+  console.log('squad & wardrobe ok');
 
   // ---- offline PWA
   const pwa = await browser.newContext({ viewport: { width: 900, height: 430 } }); const pp = await pwa.newPage();

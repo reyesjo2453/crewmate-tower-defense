@@ -47,9 +47,38 @@
     <header class="bar">
       <button class="btn small" id="hubBack">&larr; Title</button>
       <h2>Mission Map</h2>
-      <div class="bar-right"><span class="pill" id="hubStars">&#9733; 0</span><button class="btn small" id="hubLog">Logbook</button></div>
+      <div class="bar-right"><span class="pill" id="hubStars">&#9733; 0</span><button class="btn small" id="hubWard">Wardrobe</button><button class="btn small" id="hubLog">Logbook</button></div>
     </header>
     <div class="hub-scroll" id="hubList"></div>
+  </section>
+
+  <!-- SQUAD SELECT -->
+  <section id="s-squad" class="screen hidden">
+    <header class="bar">
+      <button class="btn small" id="sqBack">&larr; Map</button>
+      <h2>Choose your squad</h2>
+      <button class="btn small" id="sqWard">Wardrobe</button>
+    </header>
+    <div class="sq-scroll">
+      <p class="sq-intro" id="sqIntro"></p>
+      <div class="sq-crew" id="sqCrew"></div>
+      <h3>Mission intel</h3>
+      <div class="sq-intel" id="sqIntel"></div>
+    </div>
+    <div class="sq-foot"><span id="sqCount"></span><button class="btn primary" id="sqGo">DEPLOY &#9654;</button></div>
+  </section>
+
+  <!-- WARDROBE -->
+  <section id="s-ward" class="screen hidden">
+    <header class="bar">
+      <button class="btn small" id="wBack">&larr; Back</button>
+      <h2>Wardrobe</h2>
+      <span class="pill" id="wStars">&#9733; 0</span>
+    </header>
+    <div class="ward">
+      <div class="w-left"><canvas id="wPreview" aria-label="Preview"></canvas><div class="w-crew" id="wCrew"></div></div>
+      <div class="w-right" id="wItems"></div>
+    </div>
   </section>
 
   <!-- GAME -->

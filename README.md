@@ -29,6 +29,23 @@ The cargo ship **HALCYON** wakes two crew from cryo-sleep to find something craw
 
 Foes include Vent Crawlers, Mimics, Wisp Ghosts (flying), Sabotage Drones (flying, shoot back), Shapeshifters (stealth), Plated Mimics (armor), Spore Walkers (split when popped) and three bosses. The **Logbook** (title/map screen) lists everyone and what to do about them.
 
+### Doors and sabotage (from Mission 2)
+
+- **Doors:** striped blast doors sit on some floor-path tiles. Tap one to **slam it shut** for 6 seconds; walking foes pile up behind it (great for Sparky). It then recharges for 18 seconds. Flyers ignore doors and **bosses smash through** them.
+- **Sabotage:** the Signal fights back mid-wave. A banner appears and repair panels flash on the floor; tap each panel a few times to fix it.
+  - **Lights Out:** darkness falls and shooters' range drops by 30%.
+  - **Oxygen Leak:** DP stops refilling and slowly drains.
+  - **Reactor Meltdown:** two panels and a countdown. If time runs out you lose 2 hearts.
+- Captain Juno and the crew explain each one on the radio the first time it happens. On **Crew** difficulty doors stay shut longer, panels need fewer taps, timers are longer and a meltdown costs only 1 heart.
+
+### Squads (from Mission 4)
+
+When a mission has more crew than seats, a **squad screen** comes first: 4 seats in Chapter 2, 5 in Chapter 3 (+1 on Crew difficulty). Mission intel lists every foe (flies, sneaky, armored…), the doors and the sabotages, so you can bring the right answers. The newest crewmate always comes along, and your last squad for each mission is remembered.
+
+### Wardrobe
+
+Stars unlock **hats** (10), **visor colours** (5) and **pets** (5) — e.g. Party Hat at 4★, Fix-It Bot at 9★, Crown at 26★. Each crewmate has their own look, shown in battle, on cards and in story scenes. Open it from the mission map or the squad screen; new unlocks get a red dot and a line on the victory screen. Looks are cosmetic only.
+
 Mission 1 is a hand-held **tutorial** with Captain Juno (replayable in Settings).
 
 ## Soundtrack
@@ -46,7 +63,7 @@ An original, adaptive score synthesized live in `js/audio.js` (no audio files): 
 
 ## Controls
 
-Touch / mouse: tap a card → tap a glowing tile; tap a crewmate for its menu. Keyboard: `1`–`6` pick crew, `Space` start/next wave, `P` pause, `Esc` cancel. The game plays best in **landscape**; it works in portrait with smaller tiles.
+Touch / mouse: tap a card → tap a glowing tile; tap a crewmate for its menu. Tap a striped door to slam it; tap flashing panels to fix sabotage. Keyboard: `1`–`6` pick crew, `Space` start/next wave, `P` pause, `Esc` cancel. The game plays best in **landscape**; it works in portrait with smaller tiles.
 
 ## Run it
 
@@ -65,10 +82,10 @@ Progress (stars, unlocks, settings) is saved in `localStorage` under `crewmate-c
 ## Project layout
 
 - `index.html`, `style.css` — shell and styling
-- `js/data.js` — **all content**: crew, foes, themes, maps, waves, story, tutorial script, difficulty
+- `js/data.js` — **all content**: crew, foes, themes, maps, waves, story, tutorial script, difficulty, doors & sabotage, squads, wardrobe items
 - `js/art.js` — Canvas drawing for crewmates, foes and environments
 - `js/engine.js` — simulation + rendering (DOM-free, can run headless)
-- `js/ui.js` — screens, dialogue, HUD, tutorial, save data
+- `js/ui.js` — screens, dialogue, squad select, wardrobe, HUD, tutorial, save data
 - `js/audio.js` — synthesized sound & music
 - `sw.js`, `manifest.json`, `icons/` — PWA
 - `tests/` — dev only: `verify.cjs` (data validation, a click-through of the first-play journey, mechanics, offline), `sim.cjs` + `bot.js` (an automatic player used to tune difficulty)
@@ -85,4 +102,4 @@ The `?test` URL flag exposes `window.__t` for the tests; the normal game exposes
 
 ## Adding a mission
 
-Add an entry to `LEVELS` in `js/data.js`: grid size, `routes` (ground paths on tile corners; `air` routes for flyers), `high` deck tiles, `walls`, `waves` via `W(secondsUntilNext, [foe, count, gap, route, delay])`, and `pre`/`post` story lines. `node tests/verify.cjs` checks it for overlapping tiles and bad references.
+Add an entry to `LEVELS` in `js/data.js`: grid size, `routes` (ground paths on tile corners; `air` routes for flyers), `high` deck tiles, `walls`, `waves` via `W(secondsUntilNext, [foe, count, gap, route, delay])`, and `pre`/`post` story lines. Doors and sabotage go in `LEVEL_EXTRAS` (`doors: [[x, y]]` on floor-path tiles, `sabo: { waveNumber: 'lights' | 'o2' | 'reactor' }`); `squad` overrides the seat count. `node tests/verify.cjs` checks it for overlapping tiles and bad references.

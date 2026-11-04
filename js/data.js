@@ -411,7 +411,7 @@ const LEVELS = [
   },
   {
     id: 8, chapter: 3, name: 'The Long Quiet', place: 'Wreck of the Meridian', theme: 'meridian',
-    cols: 11, rows: 7, startDP: 20, lives: 6, crew: ['brick', 'tank', 'rook', 'lumi', 'sparky', 'echo'],
+    cols: 11, rows: 7, startDP: 22, lives: 6, scale: 0.9, crew: ['brick', 'tank', 'rook', 'lumi', 'sparky', 'echo'],
     routes: [R([[0, 1], [4, 1], [4, 5], [10, 5]]), R([[10, 1], [7, 1], [7, 5]]), R([[0, 0], [10, 5]], true)],
     high: [[2, 2], [3, 4], [5, 3], [6, 3], [8, 3], [9, 3], [5, 2], [6, 4], [2, 5], [9, 6]],
     walls: [[0, 6], [10, 0], [1, 6], [10, 6], [0, 3]],
@@ -513,6 +513,79 @@ const DIFFICULTY = {
   crew: { name: 'Crew', desc: 'Relaxed and friendly. Perfect for little commanders.', hp: 0.7, atk: 0.7, dp: 1.4, startDP: 6, lives: 3 },
   captain: { name: 'Captain', desc: 'The intended experience.', hp: 1, atk: 1, dp: 1, startDP: 0, lives: 0 },
   impostor: { name: 'Impostor', desc: 'Tough foes. Slow DP. For grown-up commanders.', hp: 1.4, atk: 1.25, dp: 0.9, startDP: 0, lives: -2 }
+};
+
+/* ---------- Doors & sabotage ----------
+   Doors sit on floor-path tiles: tap one to slam it and hold walking foes back for a few seconds.
+   Sabotages are the Signal fighting back; tap the flashing panels to fix them. */
+const DOOR = { closed: 6, cooldown: 18, coach: ['juno', 'See the striped door on the path? Tap it to SLAM it shut! Walking foes have to wait while it’s closed. Bosses smash right through, though.'] };
+const SABOTAGE = {
+  lights: {
+    name: 'Lights Out', icon: '💡', color: '#ffd84a', dur: 22, panels: 1, taps: 3,
+    desc: 'Shooters can’t see as far!',
+    coach: ['sparky', 'Somebody cut the lights! Our shooters can barely see. Tap the flashing panel a few times and I’ll flip them back on!']
+  },
+  reactor: {
+    name: 'Reactor Meltdown', icon: '☢', color: '#ff4d6a', dur: 30, panels: 2, taps: 3, fail: 2,
+    desc: 'Fix BOTH panels before the timer hits zero!',
+    coach: ['juno', 'The reactor is melting down! Tap BOTH flashing panels before the timer runs out, or we lose two hearts!']
+  },
+  o2: {
+    name: 'Oxygen Leak', icon: 'O₂', color: '#77ddff', dur: 24, panels: 1, taps: 4,
+    desc: 'DP is draining away!',
+    coach: ['echo', 'Oxygen leak — our DP is draining away. Tap the flashing panel to patch it up!']
+  }
+};
+const LEVEL_EXTRAS = { // doors: floor-path tiles · sabo: { waveNumber: kind } (starts a few seconds into that wave)
+  2: { doors: [[2, 1], [2, 5]] },
+  3: { doors: [[7, 2]], sabo: { 4: 'lights' } },
+  4: { doors: [[5, 1]], sabo: { 3: 'reactor' } },
+  5: { doors: [[2, 1], [2, 5]], sabo: { 4: 'lights' } },
+  6: { doors: [[5, 3]], sabo: { 3: 'o2', 6: 'lights' } },
+  7: { doors: [[4, 1], [5, 5]], sabo: { 2: 'o2', 5: 'lights' } },
+  8: { doors: [[4, 3], [7, 3]], sabo: { 3: 'reactor' } },
+  9: { doors: [[2, 1], [6, 5], [10, 0]], sabo: { 2: 'lights', 5: 'reactor' } },
+  10: { doors: [[5, 0], [11, 3], [6, 2]], sabo: { 2: 'o2', 3: 'lights', 5: 'reactor' } }
+};
+LEVELS.forEach(l => Object.assign(l, LEVEL_EXTRAS[l.id] || {}));
+
+/* ---------- Squad ----------
+   Before a mission with more crew than seats, the player picks a squad. The newest crewmate always comes along. */
+const SQUAD_SIZE = 4;
+const SQUAD_PREF = ['brick', 'rook', 'sparky', 'lumi', 'tank', 'echo']; // the suggested squad, in order
+const squadSize = (level, diffKey) => Math.min(level.crew.length, (level.squad || (level.chapter >= 3 ? 5 : SQUAD_SIZE)) + (diffKey === 'crew' ? 1 : 0));
+
+/* ---------- Wardrobe (unlocked with stars) ---------- */
+const LOOKS = {
+  hat: [
+    { id: 'signature', name: 'Signature', stars: 0 },
+    { id: 'sprout', name: 'Sprout', stars: 2 },
+    { id: 'party', name: 'Party Hat', stars: 4 },
+    { id: 'headphones', name: 'Headphones', stars: 6 },
+    { id: 'flower', name: 'Flower', stars: 8 },
+    { id: 'chef', name: 'Chef', stars: 10 },
+    { id: 'tophat', name: 'Top Hat', stars: 13 },
+    { id: 'horns', name: 'Space Horns', stars: 16 },
+    { id: 'mushroom', name: 'Fungle Cap', stars: 19 },
+    { id: 'halo', name: 'Halo', stars: 22 },
+    { id: 'crown', name: 'Crown', stars: 26 }
+  ],
+  visor: [
+    { id: 'sky', name: 'Sky', stars: 0, c: ['#d7fbff', '#6bc9e6'] },
+    { id: 'gold', name: 'Gold', stars: 3, c: ['#fff4b8', '#e0a91c'] },
+    { id: 'rose', name: 'Rose', stars: 7, c: ['#ffe0ef', '#ff6fae'] },
+    { id: 'mint', name: 'Mint', stars: 11, c: ['#e2ffe9', '#3fd47a'] },
+    { id: 'sunset', name: 'Sunset', stars: 15, c: ['#ffd36b', '#ff5a6a'] },
+    { id: 'nebula', name: 'Nebula', stars: 20, c: ['#c9a6ff', '#3a1a7a'] }
+  ],
+  pet: [
+    { id: 'none', name: 'No pet', stars: 0 },
+    { id: 'minibean', name: 'Mini Bean', stars: 5 },
+    { id: 'bot', name: 'Fix-It Bot', stars: 9 },
+    { id: 'sporeling', name: 'Sporeling', stars: 12 },
+    { id: 'wisp', name: 'Friendly Wisp', stars: 17 },
+    { id: 'starling', name: 'Starling', stars: 24 }
+  ]
 };
 
 /* ---------- Difficulty ramp ----------

@@ -8,13 +8,14 @@
 
   /* ---------- Save ---------- */
   const SAVE_KEY = 'crewmate-command-v1';
-  const defaults = () => ({ stars: {}, diff: 'captain', music: true, sfx: true, intro: false, tutDone: false, seen: {}, losses: {}, ended: false });
+  const defaults = () => ({ stars: {}, diff: 'captain', music: true, sfx: true, intro: false, tutDone: false, seen: {}, losses: {}, ended: false, looks: {}, squads: {}, coach: {}, lookSeen: 0 });
   let mem = null;
   function loadSave() {
     try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && typeof s === 'object') return Object.assign(defaults(), s); } catch (e) { }
     return mem || defaults();
   }
   let save = loadSave();
+  STYLE.looks = save.looks;
   function persist() { mem = save; try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { } }
   const unlocked = id => id === 1 || (save.stars[id - 1] || 0) > 0;
   const totalStars = () => Object.values(save.stars).reduce((a, b) => a + b, 0);
@@ -24,7 +25,8 @@
   function show(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.toggle('hidden', s.id !== 's-' + id));
     current = id; if (id !== 'game' && G) { G.stop(); }
-    if (id === 'title' || id === 'hub' || id === 'log' || id === 'set') Sound.mood('title');
+    if (id !== 'ward') Wardrobe.stop();
+    if (id === 'title' || id === 'hub' || id === 'log' || id === 'set' || id === 'squad' || id === 'ward') Sound.mood('title');
     else if (id === 'dialog' || id === 'intro') Sound.mood('story');
   }
 
@@ -105,6 +107,7 @@
   function toHub() {
     show('hub'); Backdrop.stop(); const list = $('hubList'); list.innerHTML = '';
     $('hubStars').textContent = '★ ' + totalStars() + ' / ' + LEVELS.length * 3;
+    $('hubWard').innerHTML = 'Wardrobe' + (unlockedLooks().length > save.lookSeen ? '<i class="dot"></i>' : '');
     let nextMarked = false; const paints = [];
     CHAPTERS.forEach(ch => {
       const sec = document.createElement('div'); sec.className = 'chapter';
@@ -182,7 +185,7 @@
   $('optMusic').onchange = e => { save.music = e.target.checked; Sound.setMusic(save.music); persist(); };
   $('optSfx').onchange = e => { save.sfx = e.target.checked; Sound.setSfx(save.sfx); persist(); Sound.play('click'); };
   $('btnTutAgain').onclick = () => { save.tutDone = false; persist(); $('btnTutAgain').textContent = 'Tutorial will play in Mission 1 ✓'; };
-  $('btnReset').onclick = () => confirmBox('Reset everything?', 'This erases your stars, unlocks and logbook.', 'Reset', () => { save = defaults(); persist(); Sound.setMusic(save.music); Sound.setSfx(save.sfx); renderSettings(); });
+  $('btnReset').onclick = () => confirmBox('Reset everything?', 'This erases your stars, unlocks and logbook.', 'Reset', () => { save = defaults(); STYLE.looks = save.looks; persist(); Sound.setMusic(save.music); Sound.setSfx(save.sfx); renderSettings(); });
   $('setBack').onclick = () => { Sound.play('click'); toTitle(); };
 
   /* ---------- Modals ---------- */
@@ -207,29 +210,146 @@
   $('btnSet').onclick = () => { Sound.ensure(); Sound.play('click'); toSettings(); };
   $('hubBack').onclick = () => { Sound.play('click'); toTitle(); };
   $('hubLog').onclick = () => { Sound.play('click'); toLog('hub'); };
+  $('hubWard').onclick = () => { Sound.ensure(); Sound.play('click'); Wardrobe.open('hub'); };
+
+  /* ============================================================
+     WARDROBE (hats, visors and pets, unlocked with stars)
+     ============================================================ */
+  const unlockedLooks = () => Object.values(LOOKS).flat().filter(i => i.stars > 0 && i.stars <= totalStars());
+  const reachedCrew = () => { const reach = Math.max(1, ...LEVELS.filter(l => unlocked(l.id)).map(l => l.id)); return CREW_ORDER.filter(k => LEVELS.some(l => l.id <= reach && l.crew.includes(k))); };
+  const Wardrobe = (() => {
+    let who = 'brick', from = 'hub', raf = 0;
+    const SLOTS = [['hat', 'Hats'], ['visor', 'Visors'], ['pet', 'Pets']];
+    function open(f, k) {
+      from = f || 'hub'; const crew = reachedCrew(); who = k && crew.includes(k) ? k : crew.includes(who) ? who : crew[0];
+      show('ward'); Backdrop.stop(); $('wStars').textContent = '★ ' + totalStars();
+      const ul = unlockedLooks().length, fresh = ul > save.lookSeen; save.lookSeen = ul; persist();
+      const bar = $('wCrew'); bar.innerHTML = '';
+      crew.forEach(k => { const b = document.createElement('button'); b.dataset.k = k; b.setAttribute('aria-label', CREW[k].name); b.innerHTML = '<canvas></canvas>'; b.onclick = () => { who = k; Sound.play('click'); render(); }; bar.appendChild(b); });
+      render(); loop(); if (fresh) tipLater('New styles unlocked! ✨');
+    }
+    function tipLater(t) { setTimeout(() => { if (current === 'ward') { const el = $('wStars'); el.textContent = t; setTimeout(() => { el.textContent = '★ ' + totalStars(); }, 2600); } }, 200); }
+    function render() {
+      $('wCrew').querySelectorAll('button').forEach(b => { b.classList.toggle('on', b.dataset.k === who); paintPortrait(b.querySelector('canvas'), b.dataset.k); });
+      const box = $('wItems'); box.innerHTML = ''; const cur = save.looks[who] || {}, have = totalStars(), paints = [];
+      for (const [slot, title] of SLOTS) {
+        box.insertAdjacentHTML('beforeend', `<h3>${title}</h3>`); const grid = document.createElement('div'); grid.className = 'w-grid';
+        for (const it of LOOKS[slot]) {
+          const lock = it.stars > have, on = (cur[slot] || LOOKS[slot][0].id) === it.id, b = document.createElement('button');
+          b.className = 'item' + (on ? ' on' : '') + (lock ? ' lock' : ''); b.dataset.slot = slot; b.dataset.id = it.id;
+          b.setAttribute('aria-label', it.name + (lock ? ', needs ' + it.stars + ' stars' : ''));
+          b.innerHTML = `<canvas></canvas><span>${lock ? '★ ' + it.stars : it.name}</span>`;
+          b.onclick = () => {
+            if (lock) { Sound.play('deny'); return; }
+            save.looks[who] = Object.assign({}, save.looks[who], { [slot]: it.id }); STYLE.looks = save.looks; persist(); Sound.play('promote'); render();
+          };
+          grid.appendChild(b); paints.push([b.querySelector('canvas'), slot, it]);
+        }
+        box.appendChild(grid);
+      }
+      requestAnimationFrame(() => paints.forEach(([c, slot, it]) => paintItem(c, slot, it)));
+    }
+    function paintItem(cv, slot, it) {
+      const dpr = Math.min(devicePixelRatio || 1, 2), w = cv.clientWidth || 70, h = cv.clientHeight || 58; cv.width = w * dpr; cv.height = h * dpr;
+      const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr); const b = CREW[who], lk = lookFor(who);
+      if (slot === 'pet') { if (it.id === 'none') { ctx.fillStyle = '#4a5278'; ctx.font = 'bold 26px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('—', w / 2, h * 0.62); } else drawPet(ctx, it.id, w / 2, h * 0.86, h * 0.95, 0.4, b.color, 1); return; }
+      const hat = slot === 'hat' ? (it.id === 'signature' ? b.hat : it.id) : lk.hat, visor = slot === 'visor' ? it.c : lk.visor;
+      drawCrewmate(ctx, w / 2, h * (slot === 'hat' ? 1.18 : 1.05), h * (slot === 'hat' ? 0.95 : 1.05), { color: b.color, hat, visor, facing: 1, t: 0, idle: false, noShadow: true });
+    }
+    function loop() {
+      cancelAnimationFrame(raf); const cv = $('wPreview'); const t0 = performance.now();
+      const frame = now => {
+        raf = requestAnimationFrame(frame); const dpr = Math.min(devicePixelRatio || 1, 2), w = cv.clientWidth, h = cv.clientHeight;
+        if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+        const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+        const t = (now - t0) / 1000, b = CREW[who], lk = lookFor(who), s = Math.min(h * 0.75, w * 0.7);
+        drawCrewmate(ctx, w / 2 + s * 0.12, h * 0.9, s, { color: b.color, hat: lk.hat, visor: lk.visor, pet: lk.pet, facing: 1, t, idle: true, wide: b.block >= 3 ? 1.15 : 1 });
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(b.name, w / 2, 24);
+      };
+      raf = requestAnimationFrame(frame);
+    }
+    function stop() { cancelAnimationFrame(raf); raf = 0; }
+    $('wBack').onclick = () => { Sound.play('click'); stop(); from === 'squad' ? toSquad() : toHub(); };
+    return { open, stop };
+  })();
+
+  /* ============================================================
+     SQUAD SELECT
+     ============================================================ */
+  let squad = null; const preSeen = new Set();
+  const needsSquad = () => lvl.crew.length > squadSize(lvl, save.diff);
+  function defaultSquad() {
+    const size = squadSize(lvl, save.diff), pref = SQUAD_PREF;
+    const prev = (save.squads[lvl.id] || []).filter(k => lvl.crew.includes(k));
+    const out = lvl.newCrew ? [lvl.newCrew] : [];
+    for (const k of [...prev, ...pref]) if (lvl.crew.includes(k) && !out.includes(k) && out.length < size) out.push(k);
+    return out;
+  }
+  function toSquad() {
+    show('squad'); Backdrop.stop();
+    if (!squad || !squad.every(k => lvl.crew.includes(k))) squad = defaultSquad();
+    const size = squadSize(lvl, save.diff);
+    $('sqIntro').innerHTML = `<b>Mission ${lvl.id}: ${lvl.name}</b> — pick up to <b>${size}</b> crewmates. Read the intel and bring the right answers!`;
+    const box = $('sqCrew'); box.innerHTML = '';
+    const draw = () => {
+      box.querySelectorAll('.pick').forEach(b => { const on = squad.includes(b.dataset.k); b.classList.toggle('on', on); b.classList.toggle('off', !on && squad.length >= size); b.setAttribute('aria-pressed', on); });
+      $('sqCount').innerHTML = `<b>${squad.length}</b> / ${size} seats`; $('sqGo').disabled = !squad.length;
+    };
+    lvl.crew.forEach(k => {
+      const b = CREW[k], el = document.createElement('button'); el.className = 'pick'; el.dataset.k = k;
+      el.innerHTML = `${k === lvl.newCrew ? '<span class="new">NEW</span>' : ''}<canvas></canvas><div class="nm">${b.name}</div><div class="rl">${b.role}</div><div class="cs">${b.cost} DP · ${b.ground === 'path' ? 'floor' : 'deck'}</div>`;
+      el.onclick = () => {
+        if (k === lvl.newCrew && squad.includes(k)) { tipSquad(b.name + ' insists on coming — it’s their big day!'); Sound.play('deny'); return; }
+        if (squad.includes(k)) squad = squad.filter(x => x !== k);
+        else if (squad.length < size) squad.push(k);
+        else { tipSquad('Squad is full — tap someone to swap them out.'); Sound.play('deny'); return; }
+        Sound.play('click'); draw();
+      };
+      box.appendChild(el);
+    });
+    const intel = $('sqIntel'); intel.innerHTML = '';
+    const foes = [...new Set(lvl.waves.flatMap(w => w.spawns.map(s => s.type)))], paints = [];
+    foes.forEach(f => {
+      const d = FOES[f], tags = [d.flying && 'FLIES', d.stealth && 'SNEAKY', d.ranged && 'SHOOTS', d.boss && 'BOSS', d.def >= 40 && 'ARMORED', d.splits && 'SPLITS'].filter(Boolean);
+      const el = document.createElement('div'); el.className = 'intel'; el.title = d.tip; el.innerHTML = `<canvas></canvas><div>${d.name}<small>${tags.join(' · ') || 'WALKS'}</small></div>`;
+      intel.appendChild(el); paints.push([el.querySelector('canvas'), f]);
+    });
+    if (lvl.doors) intel.insertAdjacentHTML('beforeend', `<div class="intel hz">🚪 ${lvl.doors.length} door${lvl.doors.length > 1 ? 's' : ''}<small>TAP TO SLAM</small></div>`);
+    if (lvl.sabo) [...new Set(Object.values(lvl.sabo))].forEach(k => intel.insertAdjacentHTML('beforeend', `<div class="intel hz">${SABOTAGE[k].icon} ${SABOTAGE[k].name}<small>SABOTAGE</small></div>`));
+    draw();
+    requestAnimationFrame(() => { box.querySelectorAll('.pick').forEach(el => paintPortrait(el.querySelector('canvas'), el.dataset.k)); paints.forEach(([c, f]) => paintPortrait(c, f)); });
+  }
+  function tipSquad(t) { const el = $('sqCount'); el.textContent = t; clearTimeout(tipSquad.t); tipSquad.t = setTimeout(() => { if (current === 'squad') el.innerHTML = `<b>${squad.length}</b> / ${squadSize(lvl, save.diff)} seats`; }, 2200); }
+  $('sqBack').onclick = () => { Sound.play('click'); toHub(); };
+  $('sqWard').onclick = () => { Sound.play('click'); Wardrobe.open('squad', squad[0]); };
+  $('sqGo').onclick = () => { if (!squad.length) return; Sound.ensure(); Sound.play('deploy'); save.squads[lvl.id] = squad.slice(); persist(); beginGame(); };
 
   /* ============================================================
      GAME CONTROLLER
      ============================================================ */
   const cv = $('cv'), stage = $('stage');
-  let G = null, lvl = null, tut = null, tipTimer = 0, lastHud = {}, wasCleared = false, forceTut = false;
+  let G = null, lvl = null, tut = null, tipTimer = 0, lastHud = {}, wasCleared = false, forceTut = false, coachT = 0;
 
   function playLevel(id) {
-    lvl = LEVELS.find(l => l.id === id); wasCleared = (save.stars[id] || 0) > 0;
-    const go = () => beginGame();
-    if (!wasCleared && lvl.pre) dialog(lvl.pre, lvl, go); else go();
+    lvl = LEVELS.find(l => l.id === id); wasCleared = (save.stars[id] || 0) > 0; squad = null;
+    const go = () => { if (needsSquad()) toSquad(); else beginGame(); };
+    if (!wasCleared && lvl.pre && !preSeen.has(id)) { preSeen.add(id); dialog(lvl.pre, lvl, go); } else go();
   }
 
   function beginGame() {
     closeModal(); show('game'); Backdrop.stop();
     const runTut = !!lvl.tutorial && (!save.tutDone || forceTut); forceTut = false;
     lvl.waves.forEach(w => w.spawns.forEach(s => { save.seen[s.type] = true; })); persist();
-    G.start(lvl, save.diff, { autoWaves: !runTut });
+    G.start(lvl, save.diff, { autoWaves: !runTut, squad: needsSquad() ? squad : null });
     buildCards(); lastHud = {}; fit(); G.run(); hud(true);
     Sound.mood('battle'); Sound.intensity(0); Sound.danger(0); if (save.music) Sound.startMusic();
     $('tut').classList.add('hidden'); $('unitPanel').classList.add('hidden'); $('radio').classList.add('hidden'); clearTimeout(radioPend); clearTimeout(radioT);
     tut = null; G.frozen = false;
     if (runTut) tut = new Tutorial(); else showBanner('Deploy your crew', 'then press START', false);
+    clearTimeout(coachT);
+    if (!runTut && G.doors.length && !save.coach.door) {
+      const d = G.doors[0]; coachT = setTimeout(() => { if (G.level !== lvl) return; radio(DOOR.coach[0], DOOR.coach[1], 10000); G.hint = [d.x, d.y]; coachT = setTimeout(() => { if (!tut) G.hint = null; }, 9000); }, 1400);
+    }
     if (innerHeight > innerWidth * 1.1) { const r = $('rotate'); r.classList.remove('hidden'); r.style.animation = 'none'; r.offsetHeight; r.style.animation = ''; setTimeout(() => r.classList.add('hidden'), 6000); }
   }
 
@@ -259,9 +379,9 @@
     const t = $('tip'); t.textContent = text; t.classList.remove('hidden'); clearTimeout(tipTimer); tipTimer = setTimeout(() => t.classList.add('hidden'), 2400);
   }
   let radioT = 0, radioPend = 0;
-  function radio(who, text) {
-    const c = CAST[who] || CAST.juno; paintPortrait($('radioPic'), c); $('radioName').textContent = c.name; $('radioTxt').textContent = text;
-    $('radio').classList.remove('hidden'); clearTimeout(radioT); radioT = setTimeout(() => $('radio').classList.add('hidden'), 6500);
+  function radio(who, text, ms) {
+    const c = CAST[who] || CAST.juno; paintPortrait($('radioPic'), CAST[who] ? who : c); $('radioName').textContent = c.name; $('radioTxt').textContent = text;
+    $('radio').classList.remove('hidden'); clearTimeout(radioT); radioT = setTimeout(() => $('radio').classList.add('hidden'), ms || 6500);
   }
 
   /* ----- game events ----- */
@@ -275,11 +395,19 @@
           if (d.radio) { clearTimeout(radioPend); radioPend = setTimeout(() => radio(d.radio[0], d.radio[1]), 1200); } break;
         case 'boss': showBanner('⚠ BOSS', d.name, true); break;
         case 'boss-call': tip('The Hollow calls for backup!'); break;
+        case 'door': if (!save.coach.door) { save.coach.door = true; persist(); if (G.hint && G.doorAt(G.hint[0], G.hint[1])) G.hint = null; } break;
+        case 'door-smash': tip('Bosses smash right through doors!'); break;
+        case 'sabotage': {
+          showBanner('⚠ SABOTAGE', d.def.name, true); tip(d.def.desc);
+          const ck = 'sabo_' + d.kind; if (!save.coach[ck]) { save.coach[ck] = true; persist(); clearTimeout(radioPend); radioPend = setTimeout(() => radio(d.def.coach[0], d.def.coach[1], 9000), 900); }
+          break;
+        }
+        case 'sabotage-end': tip(d.fixed ? 'Fixed! Nice work, Commander.' : d.kind === 'reactor' ? 'The reactor overheated!' : SABOTAGE[d.kind].name + ' wore off.'); break;
         case 'placing': syncCards(); if (d) tut && tut.on('select:' + d); break;
         case 'select': renderPanel(d); if (d) tut && tut.on('select:field'); break;
         case 'deploy': tut && tut.on('deploy:' + d.type); break;
         case 'skill': tut && tut.on('skill'); break;
-        case 'leak': pop(); break;
+        case 'leak': if (d) pop(); break;
         case 'end': onEnd(d); break;
         case 'frame': frame(); break;
       }
@@ -325,7 +453,9 @@
     if (last && n > 0) lv = 3;
     Sound.intensity(lv);
     const low = G.lives <= Math.max(1, Math.floor(G.maxLives * 0.3)) && G.state === 'playing' ? 0.45 : 0;
-    Sound.danger(Math.max((near - 0.55) / 0.4, low));
+    const alarm = G.sabo && G.sabo.kind === 'reactor' ? 0.4 + 0.5 * (1 - G.sabo.t / G.sabo.dur) : 0;
+    if (G.sabo && lv < 2 && G.state === 'playing') Sound.intensity(2);
+    Sound.danger(Math.max((near - 0.55) / 0.4, low, alarm));
   }
 
   $('btnNext').onclick = () => { Sound.ensure(); if (!G.allow({ kind: 'next' })) { tip('Follow the Captain first!'); return; } if (G.callNextWave()) Sound.play('click'); };
@@ -397,16 +527,19 @@
       const tips = ['Guards (Brick, Tank) must stand on the floor path. Shooters need the raised decks.', 'Promote crewmates — it makes them much stronger.', 'Armored foes shrug off bullets. Sparky’s electricity ignores armor!', 'Flying foes can’t be blocked. Put shooters near the reactor.', 'Skills are powerful — tap a crewmate when the star lights up.', 'Lumi keeps guards alive. Put her on a deck near your front line.'];
       const hard = (save.losses[lvl.id] || 0) >= 2 && save.diff !== 'crew';
       setTimeout(() => {
-        modal(`<h2 class="lose">The Signal got through</h2><p>${tips[(lvl.id + (save.losses[lvl.id] || 0)) % tips.length]}</p>${hard ? '<p class="reward">Too tough? Try “Crew” difficulty in Settings.</p>' : ''}<div class="row"><button class="btn primary" id="rRe">Try again</button><button class="btn" id="rMap">Mission map</button></div>`);
+        modal(`<h2 class="lose">The Signal got through</h2><p>${tips[(lvl.id + (save.losses[lvl.id] || 0)) % tips.length]}</p>${hard ? '<p class="reward">Too tough? Try “Crew” difficulty in Settings.</p>' : ''}<div class="row"><button class="btn primary" id="rRe">Try again</button>${needsSquad() ? '<button class="btn" id="rSq">Change squad</button>' : ''}<button class="btn" id="rMap">Mission map</button></div>`);
         $('rRe').onclick = () => beginGame(); $('rMap').onclick = () => { closeModal(); toHub(); };
+        if ($('rSq')) $('rSq').onclick = () => { closeModal(); toSquad(); };
       }, 900);
       return;
     }
-    const prev = save.stars[lvl.id] || 0; save.stars[lvl.id] = Math.max(prev, r.stars); if (lvl.id === LEVELS.length) save.ended = true; persist();
+    const prev = save.stars[lvl.id] || 0, before = totalStars(); save.stars[lvl.id] = Math.max(prev, r.stars); if (lvl.id === LEVELS.length) save.ended = true; persist();
+    const newLooks = Object.values(LOOKS).flat().filter(i => i.stars > before && i.stars <= totalStars());
+    const styleMsg = newLooks.length ? `<div class="reward">NEW STYLE${newLooks.length > 1 ? 'S' : ''}: ${newLooks.map(i => i.name).join(', ')}! Visit the Wardrobe.</div>` : '';
     const nxt = LEVELS.find(l => l.id === lvl.id + 1), reward = nxt && nxt.newCrew && !prev ? `<div class="reward">NEW CREWMATE: ${CREW[nxt.newCrew].name} the ${CREW[nxt.newCrew].role}!</div>` : '';
     setTimeout(() => {
       modal(`<h2 class="win">Mission Complete!</h2><p>${lvl.name}</p><div class="bigstars">${[1, 2, 3].map(n => `<i class="${n <= r.stars ? 'on' : ''}" style="animation-delay:${n * .25}s">★</i>`).join('')}</div>
-        <p>Ship health left: ${r.lives}/${G.maxLives} · Foes stopped: ${G.kills}</p>${reward}
+        <p>Ship health left: ${r.lives}/${G.maxLives} · Foes stopped: ${G.kills}</p>${reward}${styleMsg}
         <div class="row"><button class="btn primary" id="rGo">${!prev ? 'Continue the story' : 'Mission map'}</button><button class="btn" id="rRe">Play again</button></div>`);
       $('rRe').onclick = () => beginGame();
       $('rGo').onclick = () => { closeModal(); if (!prev && lvl.post) dialog(lvl.post, lvl, afterStory); else afterStory(); };
@@ -475,5 +608,5 @@
   if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !TEST) {
     addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => { }));
   }
-  if (TEST) window.__t = { G, save: () => save, playLevel, toHub, LEVELS, beginGame, setLevel: l => { lvl = l; }, persist, unlock: () => { LEVELS.forEach(l => { save.stars[l.id] = save.stars[l.id] || 1; }); persist(); } };
+  if (TEST) window.__t = { G, save: () => save, playLevel, toSquad, Wardrobe, squad: () => squad, toHub, LEVELS, beginGame, setLevel: l => { lvl = l; }, persist, unlock: () => { LEVELS.forEach(l => { save.stars[l.id] = save.stars[l.id] || 1; }); persist(); } };
 })();

@@ -2,7 +2,7 @@
 window.runBot = function (levelId, diff, opts) {
   opts = opts || {};
   const level = LEVELS.find(l => l.id === levelId), g = new Game(null, { emit() {} });
-  g.start(level, diff, {}); g.callNextWave();
+  g.start(level, diff, { squad: opts.squad }); g.callNextWave();
   const order = opts.order || ['brick', 'rook', 'rook', 'tank', 'lumi', 'sparky', 'rook', 'echo', 'sparky', 'brick', 'rook', 'sparky', 'tank', 'sparky', 'rook'];
   let idx = 0, tick = 0;
   const pathTiles = [...g.pathSet].map(k => k.split(',').map(Number));
@@ -27,6 +27,10 @@ window.runBot = function (levelId, diff, opts) {
   while (g.state !== 'won' && g.state !== 'lost' && g.t < 1500) {
     g.update(1 / 60); tick++;
     if (tick % 20) continue;
+    // slams a door when a few walkers are about to go through it
+    if (opts.doors !== false) for (const d of g.doors) if (d.cd <= 0 && g.foes.filter(f => !f.air && !f.def.boss && Math.hypot(f.x / TILE - d.x - 0.5, f.y / TILE - d.y - 0.5) < 1.6).length >= 2) g.slamDoor(d);
+    // a human-ish fixer: gets to sabotage panels a few seconds late
+    if (g.sabo && opts.fix !== false && g.sabo.dur - g.sabo.t > (opts.fixDelay || 5)) for (const p of g.sabo.panels) if (p.taps < g.sabo.need) { g.fixPanel(p); break; }
     for (const c of g.crew) if (c.sp >= c.spMax && c.skillT <= 0 && g.foes.some(f => Math.hypot(f.x - c.cx, f.y - c.cy) < 4 * TILE)) g.useSkill(c);
     // deploy
     let tries = 0;

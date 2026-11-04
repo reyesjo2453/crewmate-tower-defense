@@ -44,7 +44,8 @@ class Game {
     this.waveIdx = -1; this.waveStart = 0; this.autoWaves = opts.autoWaves !== false;
     this.state = 'prep'; this.kills = 0; this.uid = 1; this.shake = 0; this.placing = null; this.selected = null;
     this.hint = null; this.lock = null; this.paused = false; this.speed = 1; this.acc = 0;
-    this.avail = level.crew.slice(); this.deployed = 0; this.rng = mulberry32(level.id * 31 + 7);
+    this.avail = (opts.squad && opts.squad.length ? opts.squad.filter(k => level.crew.includes(k)) : level.crew).slice(); this.deployed = 0; this.rng = mulberry32(level.id * 31 + 7);
+    this.setupDoors(); this.sabo = null; this.saboQ = []; this.darkA = 0; this.saboCount = 0; this.doorUses = 0;
     this.board = null; if (this.cv) this.resize(this.cssW || 800, this.cssH || 480);
     this.emit('start', level);
   }
@@ -73,6 +74,79 @@ class Game {
     this.cv.width = Math.round(cw * this.dpr); this.cv.height = Math.round(ch * this.dpr);
     this.board = renderBoard(this.level, TILE * sc * this.dpr);
     this.emit('resize', { cw, ch });
+  }
+
+  /* ---------- doors & sabotage ---------- */
+  setupDoors() {
+    const level = this.level, dirs = dirsOf(level.routes), easy = this.diff === DIFFICULTY.crew;
+    this.doorTime = DOOR.closed * (easy ? 1.35 : 1); this.doorCd = DOOR.cooldown;
+    this.doors = (level.doors || []).map(([x, y]) => ({ x, y, dir: dirs.get(keyOf(x, y)) || [1, 0], t: 0, cd: 0, anim: 0 }));
+    // where each walking route enters each door tile: foes stop just short of it while it's shut
+    this.routes.forEach(r => {
+      r.doorStops = [];
+      if (r.air) return;
+      for (const door of this.doors) {
+        for (let d = 0; d <= r.len; d += 0.02) {
+          const q = posAt(r, d);
+          if (Math.floor(q.x) === door.x && Math.floor(q.y) === door.y) { if (d > 0.3) r.doorStops.push({ door, d: d - 0.12 }); break; }
+        }
+      }
+    });
+    // spare floor tiles where repair panels can pop up during sabotage
+    const walls = new Set((level.walls || []).map(p => keyOf(p[0], p[1]))), pool = [];
+    for (let y = 0; y < this.rows; y++) for (let x = 0; x < this.cols; x++) if (this.tileKind(x, y) === 'none' && !walls.has(keyOf(x, y))) pool.push([x, y]);
+    const rnd = mulberry32(level.id * 977 + 3);
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    this.panelPool = pool;
+  }
+  doorAt(x, y) { return this.doors.find(d => d.x === x && d.y === y) || null; }
+  slamDoor(door) {
+    if (door.t > 0) { this.emit('deny', 'Already shut!'); return false; }
+    if (door.cd > 0) { this.emit('deny', 'Door recharging… ' + Math.ceil(door.cd) + 's'); return false; }
+    if (!this.allow({ kind: 'door' })) return false;
+    door.t = this.doorTime; door.cd = this.doorCd; this.doorUses++;
+    this.ring((door.x + 0.5) * TILE, (door.y + 0.5) * TILE, 8, 46, '#ffd84a', 0.35);
+    this.emit('sfx', 'door'); this.emit('door', door); return true;
+  }
+  rangeOf(c) { return c.b.range * (this.sabo && this.sabo.kind === 'lights' && !c.b.heal ? 0.7 : 1); }
+  startSabotage(kind) {
+    const def = SABOTAGE[kind], easy = this.diff === DIFFICULTY.crew, pool = this.panelPool;
+    if (!def || !pool.length) return;
+    const first = pool[this.saboCount % pool.length], panels = [first];
+    if (def.panels > 1) { let best = null, bd = -1; for (const p of pool) { const d = dist2(p[0], p[1], first[0], first[1]); if (d > bd) { bd = d; best = p; } } panels.push(best); }
+    this.saboCount++;
+    const dur = def.dur * (easy ? 1.4 : 1);
+    this.sabo = { kind, def, t: dur, dur, need: Math.max(1, def.taps - (easy ? 1 : 0)), panels: panels.map(([x, y]) => ({ x, y, taps: 0 })) };
+    this.shake = Math.max(this.shake, 0.25);
+    this.emit('sfx', 'alarm'); this.emit('sabotage', this.sabo);
+  }
+  panelAt(x, y) { return this.sabo && this.sabo.panels.find(p => p.x === x && p.y === y) || null; }
+  fixPanel(p) {
+    const s = this.sabo; if (!s || p.taps >= s.need) return false;
+    if (!this.allow({ kind: 'fix' })) return false;
+    p.taps++; this.ring((p.x + 0.5) * TILE, (p.y + 0.5) * TILE, 6, 40, p.taps >= s.need ? '#7dff9c' : '#ffd84a', 0.3);
+    this.emit('sfx', p.taps >= s.need ? 'fixed' : 'fix');
+    if (s.panels.every(q => q.taps >= s.need)) this.endSabotage(true);
+    return true;
+  }
+  endSabotage(fixed) {
+    const s = this.sabo; if (!s) return; this.sabo = null;
+    if (!fixed && s.def.fail) {
+      const loss = this.diff === DIFFICULTY.crew ? 1 : s.def.fail;
+      this.lives = Math.max(0, this.lives - loss); this.shake = 0.6;
+      const ex = this.reactorPos(); this.fx.push({ k: 'text', x: ex[0], y: ex[1] - 30, txt: '-' + loss + ' ♥', color: '#ff5a6a', life: 1.4, age: 0 });
+      this.ring(ex[0], ex[1], 10, 200, '#ff4d6a', 0.8); this.emit('sfx', 'leak'); this.emit('leak', null);
+    }
+    this.emit('sabotage-end', { kind: s.kind, fixed });
+  }
+  reactorPos() { const g = this.routes.find(r => !r.air) || this.routes[0], e = g.pts[g.pts.length - 1]; return [e[0] * TILE, e[1] * TILE]; }
+  updateHazards(dt) {
+    for (const d of this.doors) { d.t = Math.max(0, d.t - dt); d.cd = Math.max(0, d.cd - dt); d.anim += ((d.t > 0 ? 1 : 0) - d.anim) * Math.min(1, dt * 14); }
+    if (this.saboQ.length && this.saboQ[0].time <= this.t) {
+      if (this.sabo) this.saboQ[0].time = this.t + 2; else this.startSabotage(this.saboQ.shift().kind);
+    }
+    if (this.sabo) { this.sabo.t -= dt; if (this.sabo.t <= 0) this.endSabotage(false); }
+    this.darkA += ((this.sabo && this.sabo.kind === 'lights' ? 1 : 0) - this.darkA) * Math.min(1, dt * 3);
   }
 
   /* ---------- helpers ---------- */
@@ -104,6 +178,7 @@ class Game {
     const b = CREW[type]; if (!b || !this.avail.includes(type)) return { ok: false, why: 'Not available' };
     const kind = this.tileKind(x, y);
     if (kind === 'none') return { ok: false, why: 'Can’t build here' };
+    if (this.doorAt(x, y)) return { ok: false, why: 'That’s a door — tap it to slam it!' };
     if (this.crewAt(x, y)) return { ok: false, why: 'Occupied' };
     if (kind !== b.ground) return { ok: false, why: b.ground === 'path' ? b.name + ' stands on the floor path' : b.name + ' needs a high deck' };
     if (this.dp < b.cost) return { ok: false, why: 'Need ' + b.cost + ' DP' };
@@ -166,6 +241,8 @@ class Game {
     const w = this.level.waves[this.waveIdx];
     for (const s of w.spawns) for (let i = 0; i < s.n; i++) this.queue.push({ time: this.t + s.delay + i * s.gap + 0.4, type: s.type, route: s.route });
     this.queue.sort((a, b) => a.time - b.time);
+    const sk = this.level.sabo && this.level.sabo[this.waveIdx + 1];
+    if (sk) { this.saboQ.push({ time: this.t + 6, kind: sk }); this.saboQ.sort((a, b) => a.time - b.time); }
     const radio = this.level.radio && this.level.radio[this.waveIdx + 1];
     this.emit('wave', { n: this.waveIdx + 1, total: this.level.waves.length, radio, last: this.waveIdx === this.level.waves.length - 1 });
     this.emit('sfx', 'wave');
@@ -228,7 +305,8 @@ class Game {
   update(dt) {
     this.t += dt;
     if (this.state === 'prep') return;
-    this.dp = Math.min(this.dpMax, this.dp + this.dpRate * dt);
+    this.dp = Math.max(0, Math.min(this.dpMax, this.dp + (this.sabo && this.sabo.kind === 'o2' ? -0.4 : this.dpRate) * dt));
+    this.updateHazards(dt);
     // wave timers
     while (this.queue.length && this.queue[0].time <= this.t) { const q = this.queue.shift(); this.spawnFoe(q.type, q.route, q.d || 0); }
     if (this.autoWaves && this.waveIdx >= 0 && this.waveIdx < this.level.waves.length - 1 && this.t - this.waveStart >= this.level.waves[this.waveIdx].dur) this.startWave();
@@ -239,7 +317,7 @@ class Game {
     this.shake = Math.max(0, this.shake - dt);
     if (this.state === 'playing' && this.lives <= 0) { this.state = 'lost'; this.emit('sfx', 'lose'); this.emit('end', { won: false }); return; }
     if (this.state === 'playing' && this.waveIdx === this.level.waves.length - 1 && !this.queue.length && !this.foes.length) {
-      this.state = 'won';
+      this.state = 'won'; this.sabo = null; this.saboQ = [];
       const ratio = this.lives / this.maxLives, stars = ratio >= 0.7 ? 3 : ratio >= 0.35 ? 2 : 1;
       this.emit('sfx', 'win'); this.emit('end', { won: true, stars, lives: this.lives });
     }
@@ -270,8 +348,14 @@ class Game {
         return;
       }
     }
-    // move
-    f.d += def.spd * f.slowMul * dt;
+    // move (shut doors hold walking foes back; bosses smash them open)
+    let nd = f.d + def.spd * f.slowMul * dt;
+    if (!f.air && f.r.doorStops) for (const st of f.r.doorStops) {
+      if (st.door.t <= 0 || f.d > st.d + 0.01 || nd <= st.d) continue;
+      if (def.boss) { st.door.t = 0; this.shake = 0.4; this.puff((st.door.x + 0.5) * TILE, (st.door.y + 0.5) * TILE, '#ffd84a', 12); this.emit('sfx', 'boss'); this.emit('door-smash', st.door); continue; }
+      nd = Math.max(f.d, st.d); f.atDoor = 0.3;
+    }
+    f.d = nd;
     if (f.d >= f.r.len) { this.leak(f); return; }
     const p = posAt(f.r, f.d); f.x = p.x * TILE; f.y = p.y * TILE; if (Math.abs(p.dx) > 0.2) f.facing = p.dx > 0 ? 1 : -1;
     // try to be blocked
@@ -296,9 +380,9 @@ class Game {
     if (c.skillT > 0) {
       c.skillT -= dt; if (c.skillT <= 0) c.skillT = 0;
       if (c.type === 'tank') c.hp = Math.min(st.maxHp, c.hp + 40 * dt);
-      if (c.type === 'echo') { const r = b.range * TILE; for (const f of this.foes) if (dist2(f.x, f.y, c.cx, c.cy) <= r * r) { f.slowT = 0.3; f.slowMul = Math.min(f.slowMul, 0.25); f.seenT = 0.4; } }
+      if (c.type === 'echo') { const r = this.rangeOf(c) * TILE; for (const f of this.foes) if (dist2(f.x, f.y, c.cx, c.cy) <= r * r) { f.slowT = 0.3; f.slowMul = Math.min(f.slowMul, 0.25); f.seenT = 0.4; } }
     } else if (c.sp < c.spMax) { c.sp = Math.min(c.spMax, c.sp + dt); if (c.sp >= c.spMax) { c.ready = true; this.emit('skill-ready', c); } }
-    if (b.reveals) { const r = b.range * TILE; for (const f of this.foes) if (!f.revealed && dist2(f.x, f.y, c.cx, c.cy) <= r * r) f.seenT = 0.35; }
+    if (b.reveals) { const r = this.rangeOf(c) * TILE; for (const f of this.foes) if (!f.revealed && dist2(f.x, f.y, c.cx, c.cy) <= r * r) f.seenT = 0.35; }
     if (b.block > 0) { // guards: fight what they block
       c.blocking = c.blocking.filter(f => !f.dead && f.blockedBy === c);
       if (c.blocking.length) {
@@ -308,7 +392,7 @@ class Game {
       return;
     }
     if (c.atkT > 0) return;
-    const r2 = (b.range * TILE) * (b.range * TILE);
+    const r2 = (this.rangeOf(c) * TILE) ** 2;
     if (c.type === 'lumi') {
       let w = null, wr = 0.999;
       for (const a of this.crew) { if (dist2(a.cx, a.cy, c.cx, c.cy) > r2) continue; const q = a.hp / this.stat(a).maxHp; if (q < wr) { wr = q; w = a; } }
@@ -349,6 +433,8 @@ class Game {
     return (x < 0 || y < 0 || x >= this.cols || y >= this.rows) ? null : [x, y];
   }
   tap(tx, ty) {
+    const pn = this.panelAt(tx, ty); if (pn) { this.fixPanel(pn); return; }
+    const door = this.doorAt(tx, ty); if (door && !this.placing) { this.slamDoor(door); return; }
     const c = this.crewAt(tx, ty);
     if (this.placing) {
       if (c) { if (!this.allow({ kind: 'select-crew', c })) return; this.placing = null; this.select(c); return; }
@@ -379,6 +465,7 @@ class Game {
     this.routes.forEach(r => { const p = r.pts[0]; drawVent(ctx, p[0] * TILE, p[1] * TILE, T_, r.air); });
     const ground = this.routes.find(r => !r.air) || this.routes[0], ex = ground.pts[ground.pts.length - 1];
     drawReactor(ctx, ex[0] * TILE, ex[1] * TILE, T_, this.th);
+    for (const d of this.doors) drawDoor(ctx, d.x * TILE, d.y * TILE, d.dir, d.anim, d.cd <= 0 && this.state !== 'won', d.cd / this.doorCd, T_);
     // valid placement tiles
     if (this.placing) {
       const kind = CREW[this.placing].ground, pulse = 0.35 + 0.2 * Math.sin(T_ * 6);
@@ -401,22 +488,54 @@ class Game {
     for (const s of this.shots) { ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.a || 0); ctx.fillStyle = s.color; ctx.shadowColor = s.color; ctx.shadowBlur = 8; ctx.fillRect(-9, -2.5, 16, 5); ctx.restore(); }
     // fx
     for (const e of this.fx) this.drawFx(ctx, e);
+    if (this.darkA > 0.02) this.drawDark(ctx);
+    if (this.sabo) { const s = this.sabo; s.panels.forEach(p => drawPanel(ctx, p.x * TILE, p.y * TILE, s.def.color, s.def.icon, p.taps / s.need, p.taps >= s.need, T_)); }
     // overhead bars on top
     this.foes.forEach(f => this.drawFoeBar(ctx, f));
     this.crew.forEach(c => this.drawCrewBar(ctx, c, T_));
+    if (this.sabo) this.drawAlarm(ctx, T_);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (this.hooks.overlay) this.hooks.overlay(ctx);
   }
+  drawDark(ctx) { // lights-out: darkness with little pools of light around the crew, the reactor and repair panels
+    const S = 12, w = this.cols * S, h = this.rows * S;
+    if (!this.darkCv) { this.darkCv = document.createElement('canvas'); }
+    const dc = this.darkCv; if (dc.width !== w || dc.height !== h) { dc.width = w; dc.height = h; }
+    const d = dc.getContext('2d'); d.globalCompositeOperation = 'source-over'; d.clearRect(0, 0, w, h);
+    d.fillStyle = 'rgba(3,5,14,.86)'; d.fillRect(0, 0, w, h); d.globalCompositeOperation = 'destination-out';
+    const hole = (x, y, r) => { const g = d.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.6, 'rgba(0,0,0,.8)'); g.addColorStop(1, 'rgba(0,0,0,0)'); d.fillStyle = g; d.beginPath(); d.arc(x, y, r, 0, 6.3); d.fill(); };
+    const k = S / TILE;
+    for (const c of this.crew) hole(c.cx * k, c.cy * k, Math.max(1.1, this.rangeOf(c) * 0.8) * S);
+    const ex = this.reactorPos(); hole(ex[0] * k, ex[1] * k, S * 1.4);
+    if (this.sabo) this.sabo.panels.forEach(p => hole((p.x + 0.5) * S, (p.y + 0.5) * S, S * 1.2));
+    ctx.save(); ctx.globalAlpha = this.darkA; ctx.imageSmoothingEnabled = true; ctx.drawImage(dc, 0, 0, this.cols * TILE, this.rows * TILE); ctx.restore();
+  }
+  drawAlarm(ctx, T_) {
+    const s = this.sabo, W_ = this.cols * TILE, H_ = this.rows * TILE, p = 0.5 + 0.5 * Math.sin(T_ * (s.kind === 'reactor' ? 9 : 5));
+    if (s.kind !== 'lights') {
+      const g = ctx.createRadialGradient(W_ / 2, H_ / 2, Math.min(W_, H_) * 0.35, W_ / 2, H_ / 2, Math.max(W_, H_) * 0.7);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, s.kind === 'reactor' ? `rgba(255,40,60,${0.25 + 0.3 * p})` : `rgba(80,190,255,${0.15 + 0.2 * p})`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W_, H_);
+    }
+    const txt = s.def.icon + ' ' + s.def.name.toUpperCase() + (s.kind === 'reactor' ? '  ' + Math.ceil(s.t) : '') + '  ·  tap the panel' + (s.panels.length > 1 ? 's' : '') + '!';
+    ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(txt).width + 28, x = W_ / 2, y = 22;
+    ctx.fillStyle = 'rgba(8,10,22,.85)'; rr(ctx, x - tw / 2, y - 16, tw, 32, 12); ctx.fill();
+    ctx.strokeStyle = s.def.color; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = s.def.color; ctx.fillRect(x - tw / 2 + 10, y + 11, (tw - 20) * Math.max(0, s.t / s.dur), 3);
+    ctx.fillStyle = '#fff'; ctx.fillText(txt, x, y - 1);
+  }
   drawRange(tx, ty, type, sel) {
-    const b = CREW[type], ctx = this.ctx, cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
+    const b = CREW[type], ctx = this.ctx, cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE, dim = this.rangeOf({ b }) / (b.range || 1);
     if (b.block > 0) { ctx.strokeStyle = '#ffd640'; ctx.lineWidth = 3; ctx.setLineDash([6, 6]); ctx.strokeRect(tx * TILE + 3, ty * TILE + 3, TILE - 6, TILE - 6); ctx.setLineDash([]); return; }
-    const r = b.range * TILE; ctx.fillStyle = sel ? 'rgba(255,255,255,.1)' : 'rgba(80,230,255,.12)'; ctx.strokeStyle = sel ? 'rgba(255,255,255,.7)' : 'rgba(80,230,255,.85)'; ctx.lineWidth = 2.5;
+    const r = b.range * dim * TILE; ctx.fillStyle = sel ? 'rgba(255,255,255,.1)' : 'rgba(80,230,255,.12)'; ctx.strokeStyle = sel ? 'rgba(255,255,255,.7)' : 'rgba(80,230,255,.85)'; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.fill(); ctx.stroke();
   }
   drawCrew(ctx, c, T_) {
     const b = c.b, spawnK = Math.min(1, (this.t - c.born) / 0.25), s = 62 * (0.6 + 0.4 * spawnK) * (b.block >= 3 ? 1.1 : 1);
     if (c.skillT > 0) { const g = ctx.createRadialGradient(c.cx, c.cy, 4, c.cx, c.cy, 44); g.addColorStop(0, 'rgba(255,240,140,.55)'); g.addColorStop(1, 'rgba(255,240,140,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.cx, c.cy, 44, 0, 6.3); ctx.fill(); }
-    drawCrewmate(ctx, c.cx, c.cy + 26, s, { color: b.color, hat: b.hat, facing: c.facing, t: T_ + c.id, flash: c.flash * 6, wide: b.block >= 3 ? 1.15 : 1, idle: true });
+    const lk = lookFor(c.type);
+    drawCrewmate(ctx, c.cx, c.cy + 26, s, { color: b.color, hat: lk.hat, visor: lk.visor, pet: lk.pet, facing: c.facing, t: T_ + c.id, flash: c.flash * 6, wide: b.block >= 3 ? 1.15 : 1, idle: true });
   }
   drawCrewBar(ctx, c, T_) {
     const st = this.stat(c), x = c.cx - 22, y = c.cy + 31, w = 44;

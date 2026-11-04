@@ -261,9 +261,13 @@ const Sound = (() => {
     promote: () => { [523, 659, 784, 1047].forEach((f, i) => tone(f, .12, 'triangle', .13, i * .05)); },
     win: () => { if (!musicOn) [523, 659, 784, 1047].forEach((f, i) => tone(f, .24, 'triangle', .17, i * .12)); sting(true); },
     lose: () => { if (!musicOn) [392, 349, 311, 262].forEach((f, i) => tone(f, .4, 'sawtooth', .12, i * .22)); sting(false); },
-    type: () => tone(520 + Math.random() * 120, .03, 'square', .025)
+    type: () => tone(520 + Math.random() * 120, .03, 'square', .025),
+    door: () => { tone(90, .22, 'sawtooth', .16, 0, 50); tone(1400, .05, 'square', .05, .16); tone(70, .12, 'square', .12, .18, 40); },
+    alarm: () => { [0, .32, .64].forEach(d => { tone(880, .16, 'square', .07, d); tone(660, .16, 'square', .07, d + .16); }); },
+    fix: () => tone(740, .07, 'square', .07, 0, 980),
+    fixed: () => { [659, 880, 1175].forEach((f, i) => tone(f, .14, 'triangle', .14, i * .07)); }
   };
-  const THROTTLE = { shoot: 0.06, hit: 0.05, slash: 0.07, zap: 0.08, ping: 0.08, heal: 0.1, pop: 0.04 };
+  const THROTTLE = { fix: 0.05, shoot: 0.06, hit: 0.05, slash: 0.07, zap: 0.08, ping: 0.08, heal: 0.1, pop: 0.04 };
   const lastAt = {};
 
   return {
