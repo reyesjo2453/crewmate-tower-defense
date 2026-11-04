@@ -74,6 +74,16 @@ const CREW = {
     tip: 'Place on a high deck near your guards.'
   }
 };
+// "show me" coaching: the first time a new crewmate joins, they explain where to stand
+const SHOWME = {
+  tank: { say: 'Hi! I’m Tank! Put me on the FLOOR where foes walk — I can hold back THREE at once!', after: 'Comfy! I’ll hold them still — let Brick and Rook do the hitting.' },
+  lumi: { say: 'Put me on a high deck right next to a guard, and I’ll keep them healed up!', after: 'Green sparkles mean I’m healing. Keep me close to the fighting!' },
+  sparky: { say: 'Plated foes laugh at bullets! Put me on a deck where they bunch up — my zaps ignore armor!', after: 'ZZZT! Later, tap me and press SKILL to chain the lightning!' },
+  echo: { say: 'Shimmery foes are Shapeshifters. Put me near the front — my ping reveals them AND slows everything!', after: 'Listening... Anything I ping gets slower. Shooters love me.' },
+  wrench: { say: 'Put me on a deck right NEXT to the floor path. I’ll build a barricade on the path that holds back two foes!', after: null },
+  marshal: { say: 'Put me on any high deck, partner. Longest range on the ship — and I always aim for the toughest foe.', after: 'Slow and steady. Each shot punches through half their armor.' },
+  bubbles: { say: 'Put me on a deck next to your guards! I wrap them in bubbles that block a whole hit!', after: 'Pop! A bubble soaks the next hit — even a beetle’s boom!' }
+};
 const CREW_ORDER = ['brick', 'tank', 'rook', 'lumi', 'sparky', 'echo', 'wrench', 'marshal', 'bubbles'];
 // Wrench's barricade: a crew-like blocker that lives on a floor tile
 const BARRICADE = { name: 'Barricade', hp: 650, def: 25, block: 2, buildT: 2.5, rebuildT: 7 };
@@ -706,7 +716,7 @@ const DIFFICULTY = {
   story: { name: 'Story', desc: 'Just enjoy the adventure — the ship can’t be destroyed. Lost hearts still cost stars.', hp: 0.55, atk: 0.5, dp: 1.6, startDP: 10, lives: 3, easy: true, safe: true },
   crew: { name: 'Crew', desc: 'Relaxed and friendly. Perfect for little commanders.', hp: 0.7, atk: 0.7, dp: 1.4, startDP: 6, lives: 3, easy: true },
   captain: { name: 'Captain', desc: 'The intended experience.', hp: 1, atk: 1, dp: 1, startDP: 0, lives: 0 },
-  impostor: { name: 'Impostor', desc: 'Tough foes. Slow DP. For grown-up commanders.', hp: 1.4, atk: 1.25, dp: 0.9, startDP: 0, lives: -2 }
+  impostor: { name: 'Impostor', desc: 'Tougher, harder-hitting foes and fewer hearts. For grown-up commanders.', hp: 1.2, atk: 1.15, dp: 1, startDP: 8, lives: -2 }
 };
 
 /* ---------- Doors & sabotage ----------

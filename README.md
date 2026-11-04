@@ -6,7 +6,7 @@ Built as an offline-capable **PWA**: no build step, no dependencies, no accounts
 
 ## The story
 
-The cargo ship **HALCYON** wakes two crew from cryo-sleep to find something crawling out of the vents. It isn't an Impostor. It's a *Signal* — a lonely thing that learned to wear faces — and it keeps whispering one word: **"stay."** Across ten missions (three chapters) the crew follow it from the HALCYON through Polus Station, MIRA HQ and the glowing Fungle to the wreck of the long-lost **Meridian**, where Rook's missing sister waits. The finale asks whether you can win a war by finally saying hello.
+The cargo ship **HALCYON** wakes two crew from cryo-sleep to find something crawling out of the vents. It isn't an Impostor. It's a *Signal* — a lonely thing that learned to wear faces — and it keeps whispering one word: **"stay."** Across the first ten missions (three chapters) the crew follow it from the HALCYON through Polus Station, MIRA HQ and the glowing Fungle to the wreck of the long-lost **Meridian**, where Rook's missing sister waits. The finale asks whether you can win a war by finally saying hello.
 
 **Chapter 4: The Long Way Home** (Missions 11–14) picks up the epilogue's second "hello?". It came from the **Ferrous Deep**, an asteroid mining rig where leftover pieces of the Signal have taken over the machines. The now-friendly Hollow helps the crew gather its lost pieces, three new crewmates join, and the chapter ends with a boss fight against **The Foreman**, the rig's giant drill.
 
@@ -18,7 +18,8 @@ The cargo ship **HALCYON** wakes two crew from cryo-sleep to find something craw
 - Tap a crewmate to **Promote** (stronger, up to 2 ranks), **Retreat** (refund half your DP) or fire their **Skill** (a charge bar fills over time — tap when the star lights up).
 - Two damage types: physical shots are reduced by **armor**; Sparky's electricity ignores it.
 - Stealthy **Shapeshifters** can't be targeted until they get close — or until **Echo** scans them.
-- Four difficulty levels in Settings: **Story** (the ship can't be destroyed), **Crew** (relaxed, for ~7-year-old commanders), **Captain** (intended) and **Impostor** (hard). Stars (1–3) are earned by ship health left.
+- Four difficulty levels in Settings: **Story** (the ship can't be destroyed), **Crew** (relaxed, for ~7-year-old commanders), **Captain** (intended) and **Impostor** (tougher, harder-hitting foes and two fewer hearts — very hard but beatable). Stars (1–3) are earned by ship health left.
+- A **side route** that joins another one carries on along it to the reactor, so foes from every vent have to get past your main line.
 
 | Crew | Role | Notes |
 | --- | --- | --- |
@@ -73,7 +74,7 @@ The Logbook's **Medals** tab tracks 23 goals, such as winning without losing a h
 - **Options in Settings:** colour-blind friendly highlights (orange stripes for floor tiles, blue dots for decks, blue/orange health bars), bigger buttons, and a vibration on/off switch.
 - **In battle:** a **½×** speed and a **💡 Hint** button that suggests who to place and where (or who to promote).
 
-Mission 1 is a hand-held **tutorial** with Captain Juno (replayable in Settings).
+Mission 1 is a hand-held **tutorial** with Captain Juno (replayable in Settings). After that, the first time each new crewmate joins, they say on the radio where they like to stand, their card glows, and a good tile glows on the map until you place them.
 
 ## Soundtrack
 
@@ -100,7 +101,7 @@ python3 -m http.server 8000      # then open http://localhost:8000/
 
 Service workers need HTTPS or localhost. Open once online, wait a moment, and it plays offline. On iPhone: Safari → Share → **Add to Home Screen**. On Android/desktop Chrome: menu → **Install app**.
 
-Progress (stars, bolts, XP and upgrades, medals, Endless bests, unlocks, settings) is saved in `localStorage` under `crewmate-command-v1`.
+Progress (stars, bolts, XP and upgrades, medals, Endless bests, unlocks, settings) is saved in `localStorage` under `crewmate-command-v1`. **Settings → Progress → Copy my save code** turns the whole save into one `CREW1-…` code; paste it into **Load a save code** on another device (or keep it as a backup). The code has a checksum, so a partly-copied code is rejected instead of loading a broken save.
 
 ## GitHub Pages
 
@@ -115,7 +116,7 @@ Progress (stars, bolts, XP and upgrades, medals, Endless bests, unlocks, setting
 - `js/ui.js` — screens, dialogue, mission briefing (squad and challenges), Endless, crew training and wardrobe, medals, HUD, hints, tutorial, save data
 - `js/audio.js` — synthesized sound & music
 - `sw.js`, `manifest.json`, `icons/` — PWA
-- `tests/` — dev only: `verify.cjs` (data validation, a click-through of the first-play journey, mechanics for every crewmate and foe, challenges, Endless, training, medals, settings, offline), `sim.cjs` + `bot.js` (an automatic player used to tune difficulty)
+- `tests/` — dev only: `verify.cjs` (data validation, a click-through of the first-play journey, mechanics for every crewmate and foe, challenges, Endless, training, medals, settings, save codes, new-crewmate coaching, offline), `sim.cjs` + `bot.js` (an automatic player used to tune difficulty)
 
 ## Testing
 
