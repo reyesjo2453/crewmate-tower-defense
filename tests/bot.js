@@ -1,10 +1,10 @@
 /* Dev-only: a mediocre automatic player used to sanity-check difficulty (loaded by tests/sim.cjs). */
 window.runBot = function (levelId, diff, opts) {
   opts = opts || {};
-  const level = LEVELS.find(l => l.id === levelId), g = new Game(null, { emit() {} });
-  g.start(level, diff, { squad: opts.squad }); g.callNextWave();
-  const order = opts.order || ['brick', 'rook', 'rook', 'tank', 'lumi', 'sparky', 'rook', 'echo', 'sparky', 'brick', 'rook', 'sparky', 'tank', 'sparky', 'rook'];
-  let idx = 0, tick = 0;
+  const level = opts.level || LEVELS.find(l => l.id === levelId), g = new Game(null, { emit() {} });
+  g.start(opts.level || level, diff, { squad: opts.squad, mods: opts.mods, ups: opts.ups }); g.callNextWave();
+  const order = opts.order || ['brick', 'rook', 'marshal', 'rook', 'tank', 'lumi', 'bubbles', 'sparky', 'wrench', 'rook', 'echo', 'sparky', 'marshal', 'brick', 'rook', 'sparky', 'tank', 'sparky', 'rook'];
+  const avail = order.filter(t => g.avail.includes(t)); let idx = 0, tick = 0;
   const pathTiles = [...g.pathSet].map(k => k.split(',').map(Number));
   const highTiles = level.high.slice();
   const near = (a, b, r) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 <= r * r;
@@ -24,7 +24,7 @@ window.runBot = function (levelId, diff, opts) {
     for (const t of pool) { if (g.crewAt(t[0], t[1])) continue; const s = score(type, t); if (s > bs) { bs = s; best = t; } }
     if (best) g.deploy(type, best[0], best[1]);
   }
-  while (g.state !== 'won' && g.state !== 'lost' && g.t < 1500) {
+  while (g.state !== 'won' && g.state !== 'lost' && g.t < (opts.maxT || 1500)) {
     g.update(1 / 60); tick++;
     if (tick % 20) continue;
     // slams a door when a few walkers are about to go through it
@@ -35,13 +35,12 @@ window.runBot = function (levelId, diff, opts) {
     // deploy
     let tries = 0;
     while (tries++ < 3) {
-      const type = order[idx % order.length];
-      if (!g.avail.includes(type)) { idx++; continue; }
-      if (g.crew.length >= (opts.max || 14)) break;
-      if (g.dp >= CREW[type].cost) { const before = g.crew.length; place(type); idx++; if (g.crew.length === before) break; } else break;
+      const type = avail[idx % avail.length];
+      if (g.crew.filter(c => !c.barricade).length >= (opts.max || 14)) break;
+      if (g.dp >= CREW[type].cost) { const before = g.deployed; place(type); idx++; if (g.deployed === before) break; } else break;
     }
-    if (g.crew.length >= (opts.max || 14) || idx > 6) { // promote weakest
-      const c = g.crew.filter(c => g.promoteCost(c) != null && c.b.block + (c.b.range ? 1 : 0)).sort((a, b) => a.lv - b.lv)[0];
+    if (g.crew.filter(c => !c.barricade).length >= (opts.max || 14) || idx > 6) { // promote weakest
+      const c = g.crew.filter(c => !c.barricade && g.promoteCost(c) != null && c.b.block + (c.b.range ? 1 : 0)).sort((a, b) => a.lv - b.lv)[0];
       if (c && g.dp >= g.promoteCost(c) + 4) g.promote(c);
     }
     if (g.waveIdx < level.waves.length - 1 && g.foes.length === 0 && !g.queue.length && opts.rush === true) g.callNextWave();

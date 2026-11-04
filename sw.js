@@ -1,5 +1,5 @@
 /* Offline cache. Bump VERSION whenever any cached file changes. */
-const VERSION = 'v5';
+const VERSION = 'v6';
 const CACHE_PREFIX = `crewmate-command-${new URL(self.registration.scope).pathname}-`;
 const CACHE_NAME = CACHE_PREFIX + VERSION;
 const SHELL = [

@@ -8,17 +8,47 @@
 
   /* ---------- Save ---------- */
   const SAVE_KEY = 'crewmate-command-v1';
-  const defaults = () => ({ stars: {}, diff: 'captain', music: true, sfx: true, intro: false, tutDone: false, seen: {}, losses: {}, ended: false, looks: {}, squads: {}, coach: {}, lookSeen: 0 });
+  const defaults = () => ({ stars: {}, diff: 'captain', music: true, sfx: true, intro: false, tutDone: false, seen: {}, losses: {}, ended: false, looks: {}, squads: {}, coach: {}, lookSeen: 0,
+    mods: {}, xp: {}, ups: {}, st: {}, flags: {}, medals: {}, endless: {}, a11y: { cb: false, big: false, vib: true } });
   let mem = null;
   function loadSave() {
     try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && typeof s === 'object') return Object.assign(defaults(), s); } catch (e) { }
     return mem || defaults();
   }
   let save = loadSave();
-  STYLE.looks = save.looks;
+  function applyPrefs() {
+    STYLE.looks = save.looks; A11Y.cb = !!save.a11y.cb;
+    document.body.classList.toggle('big-ui', !!save.a11y.big);
+  }
+  applyPrefs();
   function persist() { mem = save; try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { } }
   const unlocked = id => id === 1 || (save.stars[id - 1] || 0) > 0;
   const totalStars = () => Object.values(save.stars).reduce((a, b) => a + b, 0);
+  const totalBolts = () => Object.values(save.mods).reduce((a, b) => a + b.length, 0);
+  const crewLevel = k => xpLevel(save.xp[k] || 0);
+  const pointsLeft = k => crewLevel(k) - Object.values(save.ups[k] || {}).reduce((a, b) => a + b, 0);
+  const bestEndless = () => Math.max(0, ...Object.values(save.endless));
+  const endlessOpen = () => (save.stars[ENDLESS.unlockAfter] || 0) > 0;
+  const foeTags = d => [d.flying && 'FLIES', d.stealth && 'SNEAKY', d.ranged && 'SHOOTS', d.boss && 'BOSS', d.def >= 40 && 'ARMORED', d.splits && 'SPLITS',
+    (d.burrow || d.drill) && 'BURROWS', d.drain && 'DRAINS DP', d.explodes && 'EXPLODES', d.steady && 'UNSLOWABLE'].filter(Boolean);
+  // a friendly buzz on phones for big moments (Settings → Vibration)
+  function buzz(p) { try { if (save.a11y.vib && navigator.vibrate) navigator.vibrate(p); } catch (e) { } }
+  // little pop-up for medals and level-ups
+  function toast(html) {
+    const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = html; $('toasts').appendChild(t);
+    setTimeout(() => t.classList.add('out'), 3200); setTimeout(() => t.remove(), 3800);
+  }
+  /* ---------- Medals ---------- */
+  function medalCtx() {
+    return { st: save.st, flags: save.flags, stars: totalStars(), bolts: totalBolts(), best: bestEndless(), lvl: Math.max(0, ...CREW_ORDER.map(crewLevel)), looks: unlockedLooks().length };
+  }
+  function checkMedals(quiet) {
+    const m = medalCtx(), fresh = MEDALS.filter(x => !save.medals[x.id] && x.test(m));
+    fresh.forEach(x => { save.medals[x.id] = Date.now(); if (!quiet) toast(`<b>${x.icon} Medal: ${x.name}</b><small>${x.desc}</small>`); });
+    if (fresh.length) { persist(); if (!quiet) Sound.play('medal'); }
+    return fresh;
+  }
+  const bump = (k, n) => { save.st[k] = (save.st[k] || 0) + (n || 1); };
 
   /* ---------- Screens ---------- */
   let current = 'title';
@@ -26,7 +56,7 @@
     document.querySelectorAll('.screen').forEach(s => s.classList.toggle('hidden', s.id !== 's-' + id));
     current = id; if (id !== 'game' && G) { G.stop(); }
     if (id !== 'ward') Wardrobe.stop();
-    if (id === 'title' || id === 'hub' || id === 'log' || id === 'set' || id === 'squad' || id === 'ward') Sound.mood('title');
+    if (id === 'title' || id === 'hub' || id === 'log' || id === 'set' || id === 'squad' || id === 'ward' || id === 'endless') Sound.mood('title');
     else if (id === 'dialog' || id === 'intro') Sound.mood('story');
   }
 
@@ -61,6 +91,8 @@
 
   /* ---------- Story dialogue ---------- */
   let dlg = null;
+  // each speaker's 'talking' blip pitch
+  const VOICE = { juno: 330, brick: 200, tank: 140, rook: 262, lumi: 440, sparky: 560, echo: 392, hollow: 92, kestrel: 350, mimic: 175, ship: 620, wrench: 294, marshal: 220, bubbles: 660, friend: 247, static: 80 };
   function lum(hex) { const n = parseInt(hex.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; }
   function dialog(lines, level, done) {
     if (!lines || !lines.length) { done && done(); return; }
@@ -81,7 +113,8 @@
     const nm = $('dlgName'); nm.textContent = c.name; nm.style.background = c.color; nm.style.color = lum(c.color) > 0.6 ? '#10131c' : '#fff';
     const pic = $('dlgPic'); pic.style.width = pic.style.height = ''; paintPortrait(pic, c, true);
     d.full = text; d.typing = true; const tx = $('dlgText'); tx.textContent = ''; let n = 0;
-    d.timer = setInterval(() => { n += 2; tx.textContent = text.slice(0, n); if (n % 6 === 0) Sound.play('type'); if (n >= text.length) { clearInterval(d.timer); d.typing = false; tx.textContent = text; } }, 22);
+    const pitch = VOICE[who] || 300;
+    d.timer = setInterval(() => { n += 2; tx.textContent = text.slice(0, n); if (n % 4 === 0 && /\w/.test(text[n - 1] || '')) Sound.voice(pitch); if (n >= text.length) { clearInterval(d.timer); d.typing = false; tx.textContent = text; } }, 22);
   }
   $('s-dialog').addEventListener('click', e => {
     if (e.target.id === 'dlgSkip') return; const d = dlg; if (!d) return; Sound.ensure();
@@ -106,8 +139,10 @@
   /* ---------- Mission map ---------- */
   function toHub() {
     show('hub'); Backdrop.stop(); const list = $('hubList'); list.innerHTML = '';
-    $('hubStars').textContent = '★ ' + totalStars() + ' / ' + LEVELS.length * 3;
-    $('hubWard').innerHTML = 'Wardrobe' + (unlockedLooks().length > save.lookSeen ? '<i class="dot"></i>' : '');
+    $('hubStars').textContent = '★ ' + totalStars() + ' / ' + LEVELS.length * 3 + (totalBolts() ? '  ⚡ ' + totalBolts() : '');
+    const crewDot = unlockedLooks().length > save.lookSeen || CREW_ORDER.some(k => reachedCrew().includes(k) && pointsLeft(k) > 0);
+    $('hubWard').innerHTML = 'Crew' + (crewDot ? '<i class="dot"></i>' : '');
+    $('hubEnd').classList.toggle('hidden', !endlessOpen()); $('hubEnd').textContent = '♾ Endless';
     let nextMarked = false; const paints = [];
     CHAPTERS.forEach(ch => {
       const sec = document.createElement('div'); sec.className = 'chapter';
@@ -140,7 +175,7 @@
     show('log'); Backdrop.stop(); toLog.from = from || 'title'; renderLog();
   }
   function renderLog() {
-    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.tab === logTab));
+    document.querySelectorAll('[data-tab]').forEach(t => t.classList.toggle('on', t.dataset.tab === logTab));
     const list = $('logList'); list.innerHTML = ''; const paints = [];
     const reach = Math.max(1, ...LEVELS.filter(l => unlocked(l.id)).map(l => l.id));
     if (logTab === 'crew') {
@@ -149,16 +184,22 @@
         const e = document.createElement('div'); e.className = 'entry' + (open ? '' : ' lock');
         const c = document.createElement('canvas'); e.appendChild(c); paints.push([c, k]);
         e.insertAdjacentHTML('beforeend', open ? `<div><h4>${b.name}</h4><div class="role">${b.role}</div><p>${b.blurb}</p>
-          <div class="stats"><span>HP ${b.hp}</span><span>${b.heal ? 'HEAL ' + b.heal : 'ATK ' + b.atk}</span><span>${b.block ? 'BLOCKS ' + b.block : 'RANGE ' + b.range}</span><span>DEF ${b.def}</span><span>COST ${b.cost}</span></div>
+          <div class="stats"><span>LV ${crewLevel(k)}</span><span>HP ${b.hp}</span><span>${b.heal ? 'HEAL ' + b.heal : b.repair ? 'REPAIR ' + b.repair : b.shields ? 'SHIELDS' : 'ATK ' + b.atk}</span><span>${b.block ? 'BLOCKS ' + b.block : 'RANGE ' + b.range}</span><span>DEF ${b.def}</span><span>COST ${b.cost}</span></div>
           <p><b>Skill — ${b.skill.name}:</b> ${b.skill.desc}</p></div>` : `<div><h4>???</h4><p>Reach a later mission to wake this crewmate.</p></div>`);
         list.appendChild(e);
       });
+    } else if (logTab === 'medals') {
+      const got = MEDALS.filter(m => save.medals[m.id]).length;
+      list.insertAdjacentHTML('beforeend', `<p class="medal-sum">${got} / ${MEDALS.length} medals</p>`);
+      const grid = document.createElement('div'); grid.className = 'medals';
+      MEDALS.forEach(m => { const on = !!save.medals[m.id]; grid.insertAdjacentHTML('beforeend', `<div class="medal${on ? ' on' : ''}"><i>${on ? m.icon : '🔒'}</i><b>${m.name}</b><small>${m.desc}</small></div>`); });
+      list.appendChild(grid);
     } else {
       Object.keys(FOES).forEach(k => {
         const f = FOES[k], open = save.seen[k];
         const e = document.createElement('div'); e.className = 'entry' + (open ? '' : ' lock');
         const c = document.createElement('canvas'); e.appendChild(c); paints.push([c, k]);
-        const tags = [f.flying && 'FLIES', f.stealth && 'SNEAKY', f.ranged && 'SHOOTS', f.boss && 'BOSS', f.def >= 40 && 'ARMORED', f.splits && 'SPLITS'].filter(Boolean);
+        const tags = foeTags(f);
         e.insertAdjacentHTML('beforeend', open ? `<div><h4>${f.name}</h4><div class="role">${f.boss ? 'Boss' : 'Foe'}</div><p>${f.lore}</p>
           <div class="stats"><span>HP ${f.hp}</span><span>SPD ${f.spd}</span><span>DEF ${f.def}</span>${tags.map(t => `<span>${t}</span>`).join('')}</div><p><b>Tip:</b> ${f.tip}</p></div>` : `<div><h4>???</h4><p>You haven’t met this one yet.</p></div>`);
         list.appendChild(e);
@@ -166,7 +207,7 @@
     }
     requestAnimationFrame(() => paints.forEach(([c, k]) => paintPortrait(c, k, true)));
   }
-  document.querySelectorAll('.tab').forEach(t => t.onclick = () => { logTab = t.dataset.tab; Sound.play('click'); renderLog(); });
+  document.querySelectorAll('[data-tab]').forEach(t => t.onclick = () => { logTab = t.dataset.tab; Sound.play('click'); renderLog(); });
   $('logBack').onclick = () => { Sound.play('click'); toLog.from === 'hub' ? toHub() : toTitle(); };
 
   /* ---------- Settings ---------- */
@@ -181,11 +222,15 @@
     });
     $('diffDesc').textContent = DIFFICULTY[save.diff].desc;
     $('optMusic').checked = save.music; $('optSfx').checked = save.sfx;
+    $('optCb').checked = !!save.a11y.cb; $('optBig').checked = !!save.a11y.big; $('optVib').checked = save.a11y.vib !== false;
   }
+  $('optCb').onchange = e => { save.a11y.cb = e.target.checked; applyPrefs(); persist(); };
+  $('optBig').onchange = e => { save.a11y.big = e.target.checked; applyPrefs(); persist(); };
+  $('optVib').onchange = e => { save.a11y.vib = e.target.checked; persist(); buzz(60); };
   $('optMusic').onchange = e => { save.music = e.target.checked; Sound.setMusic(save.music); persist(); };
   $('optSfx').onchange = e => { save.sfx = e.target.checked; Sound.setSfx(save.sfx); persist(); Sound.play('click'); };
   $('btnTutAgain').onclick = () => { save.tutDone = false; persist(); $('btnTutAgain').textContent = 'Tutorial will play in Mission 1 ✓'; };
-  $('btnReset').onclick = () => confirmBox('Reset everything?', 'This erases your stars, unlocks and logbook.', 'Reset', () => { save = defaults(); STYLE.looks = save.looks; persist(); Sound.setMusic(save.music); Sound.setSfx(save.sfx); renderSettings(); });
+  $('btnReset').onclick = () => confirmBox('Reset everything?', 'This erases your stars, unlocks and logbook.', 'Reset', () => { save = defaults(); applyPrefs(); persist(); Sound.setMusic(save.music); Sound.setSfx(save.sfx); renderSettings(); });
   $('setBack').onclick = () => { Sound.play('click'); toTitle(); };
 
   /* ---------- Modals ---------- */
@@ -211,34 +256,39 @@
   $('hubBack').onclick = () => { Sound.play('click'); toTitle(); };
   $('hubLog').onclick = () => { Sound.play('click'); toLog('hub'); };
   $('hubWard').onclick = () => { Sound.ensure(); Sound.play('click'); Wardrobe.open('hub'); };
+  $('hubEnd').onclick = () => { Sound.ensure(); Sound.play('click'); toEndless(); };
 
   /* ============================================================
      WARDROBE (hats, visors and pets, unlocked with stars)
      ============================================================ */
-  const unlockedLooks = () => Object.values(LOOKS).flat().filter(i => i.stars > 0 && i.stars <= totalStars());
+  const unlockedLooks = () => Object.values(LOOKS).flat().filter(i => (i.stars > 0 || i.bolts) && lookOpen(i, totalStars(), totalBolts()));
   const reachedCrew = () => { const reach = Math.max(1, ...LEVELS.filter(l => unlocked(l.id)).map(l => l.id)); return CREW_ORDER.filter(k => LEVELS.some(l => l.id <= reach && l.crew.includes(k))); };
   const Wardrobe = (() => {
-    let who = 'brick', from = 'hub', raf = 0;
+    let who = 'brick', from = 'hub', raf = 0, tab = 'train';
     const SLOTS = [['hat', 'Hats'], ['visor', 'Visors'], ['pet', 'Pets']];
     function open(f, k) {
       from = f || 'hub'; const crew = reachedCrew(); who = k && crew.includes(k) ? k : crew.includes(who) ? who : crew[0];
-      show('ward'); Backdrop.stop(); $('wStars').textContent = '★ ' + totalStars();
+      show('ward'); Backdrop.stop(); $('wStars').textContent = '★ ' + totalStars() + (totalBolts() ? ' ⚡ ' + totalBolts() : '');
+      if (from === 'squad') tab = 'style';
       const ul = unlockedLooks().length, fresh = ul > save.lookSeen; save.lookSeen = ul; persist();
       const bar = $('wCrew'); bar.innerHTML = '';
-      crew.forEach(k => { const b = document.createElement('button'); b.dataset.k = k; b.setAttribute('aria-label', CREW[k].name); b.innerHTML = '<canvas></canvas>'; b.onclick = () => { who = k; Sound.play('click'); render(); }; bar.appendChild(b); });
-      render(); loop(); if (fresh) tipLater('New styles unlocked! ✨');
+      crew.forEach(k => { const b = document.createElement('button'); b.dataset.k = k; b.setAttribute('aria-label', CREW[k].name); b.innerHTML = '<canvas></canvas><span class="lv"></span>'; b.onclick = () => { who = k; Sound.play('click'); render(); }; bar.appendChild(b); });
+      render(); loop(); if (fresh) tipLater('New styles unlocked! ✨'); checkMedals();
     }
     function tipLater(t) { setTimeout(() => { if (current === 'ward') { const el = $('wStars'); el.textContent = t; setTimeout(() => { el.textContent = '★ ' + totalStars(); }, 2600); } }, 200); }
     function render() {
-      $('wCrew').querySelectorAll('button').forEach(b => { b.classList.toggle('on', b.dataset.k === who); paintPortrait(b.querySelector('canvas'), b.dataset.k); });
-      const box = $('wItems'); box.innerHTML = ''; const cur = save.looks[who] || {}, have = totalStars(), paints = [];
+      $('wCrew').querySelectorAll('button').forEach(b => { b.classList.toggle('on', b.dataset.k === who); paintPortrait(b.querySelector('canvas'), b.dataset.k); b.querySelector('.lv').textContent = 'Lv ' + crewLevel(b.dataset.k) + (pointsLeft(b.dataset.k) > 0 ? ' •' : ''); });
+      document.querySelectorAll('[data-wtab]').forEach(b => b.classList.toggle('on', b.dataset.wtab === tab));
+      if (tab === 'train') { training(); return; }
+      const box = $('wItems'); box.innerHTML = ''; const cur = save.looks[who] || {}, have = totalStars(), bolts = totalBolts(), paints = [];
       for (const [slot, title] of SLOTS) {
         box.insertAdjacentHTML('beforeend', `<h3>${title}</h3>`); const grid = document.createElement('div'); grid.className = 'w-grid';
         for (const it of LOOKS[slot]) {
-          const lock = it.stars > have, on = (cur[slot] || LOOKS[slot][0].id) === it.id, b = document.createElement('button');
-          b.className = 'item' + (on ? ' on' : '') + (lock ? ' lock' : ''); b.dataset.slot = slot; b.dataset.id = it.id;
-          b.setAttribute('aria-label', it.name + (lock ? ', needs ' + it.stars + ' stars' : ''));
-          b.innerHTML = `<canvas></canvas><span>${lock ? '★ ' + it.stars : it.name}</span>`;
+          const lock = !lookOpen(it, have, bolts), on = (cur[slot] || LOOKS[slot][0].id) === it.id, b = document.createElement('button');
+          b.className = 'item' + (on ? ' on' : '') + (lock ? ' lock' : '') + (it.bolts ? ' bolt' : ''); b.dataset.slot = slot; b.dataset.id = it.id;
+          const need = it.bolts ? '⚡ ' + it.bolts : '★ ' + it.stars;
+          b.setAttribute('aria-label', it.name + (lock ? ', needs ' + (it.bolts ? it.bolts + ' challenge bolts' : it.stars + ' stars') : ''));
+          b.innerHTML = `<canvas></canvas><span>${lock ? need : it.name}</span>`;
           b.onclick = () => {
             if (lock) { Sound.play('deny'); return; }
             save.looks[who] = Object.assign({}, save.looks[who], { [slot]: it.id }); STYLE.looks = save.looks; persist(); Sound.play('promote'); render();
@@ -249,6 +299,24 @@
       }
       requestAnimationFrame(() => paints.forEach(([c, slot, it]) => paintItem(c, slot, it)));
     }
+    function training() {
+      const box = $('wItems'), b = CREW[who], xp = save.xp[who] || 0, lv = crewLevel(who), pts = pointsLeft(who), u = save.ups[who] || {};
+      const lo = XP_LEVELS[lv], hi = XP_LEVELS[lv + 1], frac = hi ? (xp - lo) / (hi - lo) : 1;
+      box.innerHTML = `<div class="train"><h3>${b.name} · ${b.role}</h3><div class="lvrow"><b>Level ${lv}</b><span>${hi ? xp + ' / ' + hi + ' XP' : 'MAX LEVEL'}</span></div>
+        <div class="xpbar"><i style="width:${Math.round(frac * 100)}%"></i></div>
+        <p class="pts">${pts > 0 ? `<b>${pts}</b> upgrade point${pts > 1 ? 's' : ''} to spend!` : lv < XP_MAX_LEVEL ? 'Go on missions to earn XP and level up.' : 'Fully trained!'}</p>
+        <div class="ups"></div><p class="tiny">${b.blurb}<br><b>Skill — ${b.skill.name}:</b> ${b.skill.desc}</p>
+        <button class="btn small ghost" id="wReset">Reset points</button></div>`;
+      const ups = box.querySelector('.ups');
+      UPGRADES.forEach(up => {
+        const r = u[up.id] || 0, row = document.createElement('div'); row.className = 'up';
+        row.innerHTML = `<i>${up.icon}</i><div><b>${up.name}</b><small>${up.desc} per rank</small><span class="pips">${Array.from({ length: up.max }, (_, i) => `<em class="${i < r ? 'on' : ''}"></em>`).join('')}</span></div><button class="btn small" data-up="${up.id}" ${pts <= 0 || r >= up.max ? 'disabled' : ''}>+</button>`;
+        row.querySelector('button').onclick = () => { save.ups[who] = Object.assign({}, u, { [up.id]: r + 1 }); persist(); Sound.play('promote'); render(); };
+        ups.appendChild(row);
+      });
+      $('wReset').onclick = () => { save.ups[who] = {}; persist(); Sound.play('retreat'); render(); };
+    }
+    document.querySelectorAll('[data-wtab]').forEach(b => b.onclick = () => { tab = b.dataset.wtab; Sound.play('click'); render(); });
     function paintItem(cv, slot, it) {
       const dpr = Math.min(devicePixelRatio || 1, 2), w = cv.clientWidth || 70, h = cv.clientHeight || 58; cv.width = w * dpr; cv.height = h * dpr;
       const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr); const b = CREW[who], lk = lookFor(who);
@@ -276,29 +344,38 @@
   /* ============================================================
      SQUAD SELECT
      ============================================================ */
-  let squad = null; const preSeen = new Set();
-  const needsSquad = () => lvl.crew.length > squadSize(lvl, save.diff);
+  let squad = null, chosenMods = []; const preSeen = new Set();
+  const sqKey = () => lvl.endless ? 'e' + lvl.id : lvl.id;
+  const seats = () => lvl.endless ? Math.min(lvl.crew.length, ENDLESS.squad + (DIFFICULTY[save.diff].easy ? 1 : 0)) : squadSize(lvl, save.diff);
+  const benched = k => chosenMods.includes('nomed') && !!(CREW[k].heal || CREW[k].shields);
+  const needsSquad = () => lvl.crew.length > seats();
+  const needsBrief = () => needsSquad() || !!lvl.endless || (wasCleared && modsFor(lvl).length > 0);
   function defaultSquad() {
-    const size = squadSize(lvl, save.diff), pref = SQUAD_PREF;
-    const prev = (save.squads[lvl.id] || []).filter(k => lvl.crew.includes(k));
-    const out = lvl.newCrew ? [lvl.newCrew] : [];
-    for (const k of [...prev, ...pref]) if (lvl.crew.includes(k) && !out.includes(k) && out.length < size) out.push(k);
+    const size = seats(), pref = SQUAD_PREF.concat(CREW_ORDER);
+    const prev = (save.squads[sqKey()] || []).filter(k => lvl.crew.includes(k));
+    const out = lvl.newCrew && !benched(lvl.newCrew) ? [lvl.newCrew] : [];
+    for (const k of [...prev, ...pref]) if (lvl.crew.includes(k) && !benched(k) && !out.includes(k) && out.length < size) out.push(k);
     return out;
   }
   function toSquad() {
     show('squad'); Backdrop.stop();
-    if (!squad || !squad.every(k => lvl.crew.includes(k))) squad = defaultSquad();
-    const size = squadSize(lvl, save.diff);
-    $('sqIntro').innerHTML = `<b>Mission ${lvl.id}: ${lvl.name}</b> — pick up to <b>${size}</b> crewmates. Read the intel and bring the right answers!`;
+    if (!squad || !squad.every(k => lvl.crew.includes(k) && !benched(k))) squad = defaultSquad();
+    const size = seats(), pick = needsSquad(), canMod = wasCleared && !lvl.endless;
+    $('sqTitle').textContent = lvl.endless ? 'Endless run' : pick ? 'Choose your squad' : 'Mission briefing';
+    $('sqIntro').innerHTML = lvl.endless ? `<b>Endless · ${lvl.name}</b> — waves keep coming and keep getting tougher. Pick <b>${size}</b> crewmates. How long can you last?`
+      : `<b>Mission ${lvl.id}: ${lvl.name}</b> — ${pick ? `pick up to <b>${size}</b> crewmates. Read the intel and bring the right answers!` : 'read the intel, then deploy.'}`;
+    $('sqCrewWrap').classList.toggle('hidden', !pick);
     const box = $('sqCrew'); box.innerHTML = '';
     const draw = () => {
-      box.querySelectorAll('.pick').forEach(b => { const on = squad.includes(b.dataset.k); b.classList.toggle('on', on); b.classList.toggle('off', !on && squad.length >= size); b.setAttribute('aria-pressed', on); });
-      $('sqCount').innerHTML = `<b>${squad.length}</b> / ${size} seats`; $('sqGo').disabled = !squad.length;
+      box.querySelectorAll('.pick').forEach(b => { const k = b.dataset.k, on = squad.includes(k); b.classList.toggle('on', on); b.classList.toggle('off', (!on && squad.length >= size) || benched(k)); b.classList.toggle('bench', benched(k)); b.setAttribute('aria-pressed', on); });
+      $('sqCount').innerHTML = pick ? `<b>${squad.length}</b> / ${size} seats` : chosenMods.length ? `<b>${chosenMods.length}</b> challenge${chosenMods.length > 1 ? 's' : ''} on` : '';
+      $('sqGo').disabled = pick && !squad.length;
     };
-    lvl.crew.forEach(k => {
+    if (pick) lvl.crew.forEach(k => {
       const b = CREW[k], el = document.createElement('button'); el.className = 'pick'; el.dataset.k = k;
-      el.innerHTML = `${k === lvl.newCrew ? '<span class="new">NEW</span>' : ''}<canvas></canvas><div class="nm">${b.name}</div><div class="rl">${b.role}</div><div class="cs">${b.cost} DP · ${b.ground === 'path' ? 'floor' : 'deck'}</div>`;
+      el.innerHTML = `${k === lvl.newCrew ? '<span class="new">NEW</span>' : ''}<canvas></canvas><div class="nm">${b.name}<small> Lv${crewLevel(k)}</small></div><div class="rl">${b.role}</div><div class="cs">${b.cost} DP · ${b.ground === 'path' ? 'floor' : 'deck'}</div>`;
       el.onclick = () => {
+        if (benched(k)) { tipSquad('No Medics challenge — ' + b.name + ' stays home.'); Sound.play('deny'); return; }
         if (k === lvl.newCrew && squad.includes(k)) { tipSquad(b.name + ' insists on coming — it’s their big day!'); Sound.play('deny'); return; }
         if (squad.includes(k)) squad = squad.filter(x => x !== k);
         else if (squad.length < size) squad.push(k);
@@ -307,32 +384,71 @@
       };
       box.appendChild(el);
     });
+    // challenges (only on missions you've already won)
+    $('sqModsWrap').classList.toggle('hidden', !canMod);
+    const mb = $('sqMods'); mb.innerHTML = '';
+    if (canMod) {
+      const beaten = save.mods[lvl.id] || [];
+      $('sqModsSum').textContent = `⚡ ${beaten.length} / ${modsFor(lvl).length} earned on this mission`;
+      modsFor(lvl).forEach(k => {
+        const m = MODIFIERS[k], el = document.createElement('button'); el.className = 'mod' + (chosenMods.includes(k) ? ' on' : '') + (beaten.includes(k) ? ' won' : ''); el.dataset.mod = k;
+        el.innerHTML = `<i>${m.icon}</i><b>${m.name}</b><small>${m.desc}</small>${beaten.includes(k) ? '<em>⚡</em>' : ''}`;
+        el.setAttribute('aria-pressed', chosenMods.includes(k));
+        el.onclick = () => {
+          chosenMods = chosenMods.includes(k) ? chosenMods.filter(x => x !== k) : chosenMods.concat(k); Sound.play('click');
+          if (k === 'nomed') squad = null; toSquad();
+        };
+        mb.appendChild(el);
+      });
+    }
     const intel = $('sqIntel'); intel.innerHTML = '';
     const foes = [...new Set(lvl.waves.flatMap(w => w.spawns.map(s => s.type)))], paints = [];
     foes.forEach(f => {
-      const d = FOES[f], tags = [d.flying && 'FLIES', d.stealth && 'SNEAKY', d.ranged && 'SHOOTS', d.boss && 'BOSS', d.def >= 40 && 'ARMORED', d.splits && 'SPLITS'].filter(Boolean);
+      const d = FOES[f], tags = foeTags(d);
       const el = document.createElement('div'); el.className = 'intel'; el.title = d.tip; el.innerHTML = `<canvas></canvas><div>${d.name}<small>${tags.join(' · ') || 'WALKS'}</small></div>`;
       intel.appendChild(el); paints.push([el.querySelector('canvas'), f]);
     });
-    if (lvl.doors) intel.insertAdjacentHTML('beforeend', `<div class="intel hz">🚪 ${lvl.doors.length} door${lvl.doors.length > 1 ? 's' : ''}<small>TAP TO SLAM</small></div>`);
+    if (lvl.endless) intel.insertAdjacentHTML('beforeend', `<div class="intel hz">🎲 Remixed foes<small>TOUGHER EVERY WAVE</small></div><div class="intel hz">⚠ Boss<small>EVERY ${ENDLESS.bossEvery} WAVES</small></div><div class="intel hz">🚨 Sabotage<small>EVERY ${ENDLESS.saboEvery} WAVES</small></div><div class="intel hz">🏆 Best<small>WAVE ${save.endless[lvl.id] || 0}</small></div>`);
+    if (lvl.doors && !chosenMods.includes('nodoors')) intel.insertAdjacentHTML('beforeend', `<div class="intel hz">🚪 ${lvl.doors.length} door${lvl.doors.length > 1 ? 's' : ''}<small>TAP TO SLAM</small></div>`);
     if (lvl.sabo) [...new Set(Object.values(lvl.sabo))].forEach(k => intel.insertAdjacentHTML('beforeend', `<div class="intel hz">${SABOTAGE[k].icon} ${SABOTAGE[k].name}<small>SABOTAGE</small></div>`));
     draw();
     requestAnimationFrame(() => { box.querySelectorAll('.pick').forEach(el => paintPortrait(el.querySelector('canvas'), el.dataset.k)); paints.forEach(([c, f]) => paintPortrait(c, f)); });
   }
-  function tipSquad(t) { const el = $('sqCount'); el.textContent = t; clearTimeout(tipSquad.t); tipSquad.t = setTimeout(() => { if (current === 'squad') el.innerHTML = `<b>${squad.length}</b> / ${squadSize(lvl, save.diff)} seats`; }, 2200); }
-  $('sqBack').onclick = () => { Sound.play('click'); toHub(); };
+  function tipSquad(t) { const el = $('sqCount'); el.textContent = t; clearTimeout(tipSquad.t); tipSquad.t = setTimeout(() => { if (current === 'squad') el.innerHTML = `<b>${squad.length}</b> / ${seats()} seats`; }, 2200); }
+  $('sqBack').onclick = () => { Sound.play('click'); lvl && lvl.endless ? toEndless() : toHub(); };
   $('sqWard').onclick = () => { Sound.play('click'); Wardrobe.open('squad', squad[0]); };
-  $('sqGo').onclick = () => { if (!squad.length) return; Sound.ensure(); Sound.play('deploy'); save.squads[lvl.id] = squad.slice(); persist(); beginGame(); };
+  $('sqGo').onclick = () => { if (needsSquad() && !squad.length) return; Sound.ensure(); Sound.play('deploy'); if (needsSquad()) { save.squads[sqKey()] = squad.slice(); persist(); } beginGame(); };
+
+  /* ============================================================
+     ENDLESS MODE
+     ============================================================ */
+  function makeEndless(base) {
+    return Object.assign({}, base, { endless: true, crew: reachedCrew(), waves: [], sabo: null, pre: null, post: null, radio: null, tutorial: false, newCrew: null, finale: false, finale2: false });
+  }
+  function toEndless() {
+    show('endless'); Backdrop.stop(); const list = $('endList'); list.innerHTML = '';
+    $('endBest').textContent = '♾ Best: wave ' + bestEndless();
+    const grid = document.createElement('div'); grid.className = 'cards';
+    LEVELS.filter(l => (save.stars[l.id] || 0) > 0).forEach(l => {
+      const b = document.createElement('button'); b.className = 'lvl';
+      const thumb = renderBoard(l, 22); thumb.style.width = '100%'; thumb.style.height = '118px'; b.appendChild(thumb);
+      b.insertAdjacentHTML('beforeend', `<div class="stars">♾ ${save.endless[l.id] || 0}</div><div class="meta"><div class="num">${THEMES[l.theme].name.toUpperCase()}</div><div class="nm">${l.name}</div><div class="pl">Best: ${save.endless[l.id] ? 'wave ' + save.endless[l.id] : 'not tried yet'}</div></div>`);
+      b.onclick = () => { Sound.ensure(); Sound.play('click'); lvl = makeEndless(l); wasCleared = false; squad = null; chosenMods = []; toSquad(); };
+      grid.appendChild(b);
+    });
+    list.appendChild(grid);
+  }
+  $('endBack').onclick = () => { Sound.play('click'); toHub(); };
 
   /* ============================================================
      GAME CONTROLLER
      ============================================================ */
   const cv = $('cv'), stage = $('stage');
-  let G = null, lvl = null, tut = null, tipTimer = 0, lastHud = {}, wasCleared = false, forceTut = false, coachT = 0;
+  let G = null, lvl = null, tut = null, tipTimer = 0, lastHud = {}, wasCleared = false, forceTut = false, coachT = 0, hintT = 0;
 
   function playLevel(id) {
-    lvl = LEVELS.find(l => l.id === id); wasCleared = (save.stars[id] || 0) > 0; squad = null;
-    const go = () => { if (needsSquad()) toSquad(); else beginGame(); };
+    lvl = LEVELS.find(l => l.id === id); wasCleared = (save.stars[id] || 0) > 0; squad = null; chosenMods = [];
+    const go = () => { if (needsBrief()) toSquad(); else beginGame(); };
     if (!wasCleared && lvl.pre && !preSeen.has(id)) { preSeen.add(id); dialog(lvl.pre, lvl, go); } else go();
   }
 
@@ -340,12 +456,14 @@
     closeModal(); show('game'); Backdrop.stop();
     const runTut = !!lvl.tutorial && (!save.tutDone || forceTut); forceTut = false;
     lvl.waves.forEach(w => w.spawns.forEach(s => { save.seen[s.type] = true; })); persist();
-    G.start(lvl, save.diff, { autoWaves: !runTut, squad: needsSquad() ? squad : null });
+    G.start(lvl, save.diff, { autoWaves: !runTut, squad: needsSquad() ? squad : null, mods: lvl.endless ? [] : chosenMods, ups: save.ups });
+    $('bossIntro').classList.add('hidden'); G.hint = null;
     buildCards(); lastHud = {}; fit(); G.run(); hud(true);
     Sound.mood('battle'); Sound.intensity(0); Sound.danger(0); if (save.music) Sound.startMusic();
     $('tut').classList.add('hidden'); $('unitPanel').classList.add('hidden'); $('radio').classList.add('hidden'); clearTimeout(radioPend); clearTimeout(radioT);
     tut = null; G.frozen = false;
-    if (runTut) tut = new Tutorial(); else showBanner('Deploy your crew', 'then press START', false);
+    if (runTut) tut = new Tutorial(); else if (lvl.endless) showBanner('ENDLESS', 'How long can you last?', false); else showBanner(chosenMods.length ? 'CHALLENGE ON ' + chosenMods.map(k => MODIFIERS[k].icon).join(' ') : 'Deploy your crew', 'then press START', false);
+    $('btnSpeed').innerHTML = '1&times;';
     clearTimeout(coachT);
     if (!runTut && G.doors.length && !save.coach.door) {
       const d = G.doors[0]; coachT = setTimeout(() => { if (G.level !== lvl) return; radio(DOOR.coach[0], DOOR.coach[1], 10000); G.hint = [d.x, d.y]; coachT = setTimeout(() => { if (!tut) G.hint = null; }, 9000); }, 1400);
@@ -393,26 +511,55 @@
         case 'wave':
           showBanner(d.last ? 'FINAL WAVE' : 'WAVE ' + d.n + ' / ' + d.total, d.last ? 'Hold the line!' : '', d.last); 
           if (d.radio) { clearTimeout(radioPend); radioPend = setTimeout(() => radio(d.radio[0], d.radio[1]), 1200); } break;
-        case 'boss': showBanner('⚠ BOSS', d.name, true); break;
+        case 'boss': bossIntro(d); break;
+        case 'kill': bump('kills'); bump(d.type); save.seen[d.type] = true; break;
+        case 'final-kill': showBanner('ALL CLEAR!', '', false); break;
+        case 'drill': tip('It drilled underground — wait for it to surface!'); buzz(80); break;
+        case 'build': if (!save.coach.build) { save.coach.build = true; radio('wrench', 'Barricade up! It holds back two foes. I’ll keep patching it — you keep me alive!', 7000); } break;
         case 'boss-call': tip('The Hollow calls for backup!'); break;
-        case 'door': if (!save.coach.door) { save.coach.door = true; persist(); if (G.hint && G.doorAt(G.hint[0], G.hint[1])) G.hint = null; } break;
-        case 'door-smash': tip('Bosses smash right through doors!'); break;
+        case 'door': bump('doors'); if (!save.coach.door) { save.coach.door = true; persist(); if (G.hint && G.doorAt(G.hint[0], G.hint[1])) G.hint = null; } break;
+        case 'door-smash': tip('Bosses smash right through doors!'); buzz(90); break;
         case 'sabotage': {
+          buzz([80, 40, 80]);
           showBanner('⚠ SABOTAGE', d.def.name, true); tip(d.def.desc);
           const ck = 'sabo_' + d.kind; if (!save.coach[ck]) { save.coach[ck] = true; persist(); clearTimeout(radioPend); radioPend = setTimeout(() => radio(d.def.coach[0], d.def.coach[1], 9000), 900); }
           break;
         }
-        case 'sabotage-end': tip(d.fixed ? 'Fixed! Nice work, Commander.' : d.kind === 'reactor' ? 'The reactor overheated!' : SABOTAGE[d.kind].name + ' wore off.'); break;
+        case 'sabotage-end': if (d.fixed) { bump('fixes'); if (d.kind === 'reactor' && d.left < 5) save.flags.cool = true; }
+          tip(d.fixed ? 'Fixed! Nice work, Commander.' : d.kind === 'reactor' ? 'The reactor overheated!' : SABOTAGE[d.kind].name + ' wore off.'); break;
         case 'placing': syncCards(); if (d) tut && tut.on('select:' + d); break;
         case 'select': renderPanel(d); if (d) tut && tut.on('select:field'); break;
-        case 'deploy': tut && tut.on('deploy:' + d.type); break;
-        case 'skill': tut && tut.on('skill'); break;
-        case 'leak': if (d) pop(); break;
+        case 'deploy': tut && tut.on('deploy:' + d.type); if (!tut && G.hint) G.hint = null; break;
+        case 'skill': bump('skills'); tut && tut.on('skill'); break;
+        case 'promote': bump('promotes'); break;
+        case 'leak': if (d) { pop(); buzz(50); } break;
         case 'end': onEnd(d); break;
         case 'frame': frame(); break;
       }
     }
   });
+  // a dramatic card the first time each boss shows up
+  function bossIntro(def) {
+    const key = Object.keys(FOES).find(k => FOES[k] === def), first = !save.coach['boss_' + key];
+    showBanner('⚠ BOSS', def.name, true); buzz([120, 60, 220]);
+    if (!first || tut) return;
+    save.coach['boss_' + key] = true; persist();
+    const el = $('bossIntro'); $('biName').textContent = def.name; $('biLore').textContent = def.lore; $('biTip').textContent = def.tip;
+    el.classList.remove('hidden'); el.style.animation = 'none'; el.offsetHeight; el.style.animation = '';
+    paintPortrait($('biPic'), key, true); Sound.play('bossIntro'); G.frozen = true;
+    let t = 0; const done = () => { clearTimeout(t); el.onclick = null; el.classList.add('hidden'); if (!tut) G.frozen = false; };
+    t = setTimeout(done, 3200); el.onclick = done;
+  }
+  $('btnHint').onclick = () => {
+    Sound.ensure(); if (tut) { tip('Follow the Captain first!'); return; }
+    if (G.state === 'won' || G.state === 'lost') return;
+    const h = G.suggest(); Sound.play('click');
+    if (!h) { tip('Looking good, Commander! Hold the line.'); return; }
+    if (h.promote) { G.placing = null; syncCards(); G.select(h.promote); tip('Try promoting ' + h.promote.b.name + ' — tap PROMOTE!'); return; }
+    const b = CREW[h.type]; G.hint = [h.x, h.y]; clearTimeout(hintT); hintT = setTimeout(() => { if (!tut) G.hint = null; }, 6000);
+    if (h.wait) tip(`Save up ${b.cost} DP for ${b.name}, then place them on the glowing tile.`);
+    else { if (G.placing !== h.type) G.setPlacing(h.type); tip(`Try ${b.name} on the glowing tile!`); }
+  };
   cv.addEventListener('pointerdown', e => {
     e.preventDefault(); Sound.ensure(); const t = G.tileAt(e.clientX, e.clientY); if (!t) return; G.hover = t; G.tap(t[0], t[1]);
   });
@@ -433,7 +580,7 @@
       if (innerWidth < 560 && G.maxLives > 4) { const e = document.createElement('i'); e.textContent = '♥ ' + G.lives; h.appendChild(e); }
       else for (let i = 0; i < G.maxLives; i++) { const e = document.createElement('i'); e.textContent = '♥'; if (i >= G.lives) e.className = 'off'; h.appendChild(e); }
     }
-    const p = G.progress(), left = G.nextWaveIn(); const wt = p.wave ? `Wave ${p.wave}/${p.total}` : `Wave 0/${p.total}`;
+    const p = G.progress(), left = G.nextWaveIn(); const wt = G.endless ? `♾ Wave ${p.wave}` : p.wave ? `Wave ${p.wave}/${p.total}` : `Wave 0/${p.total}`;
     if (L.wt !== wt) { $('waveTxt').textContent = wt; L.wt = wt; }
     let nb = '';
     if (G.state === 'prep') nb = '▶ START'; else if (G.waveIdx < p.total - 1) nb = '⏩ NEXT' + (left != null && G.autoWaves ? ' ' + Math.ceil(left) + 's' : ''); else nb = G.foes.length + G.queue.length + ' left';
@@ -459,7 +606,7 @@
   }
 
   $('btnNext').onclick = () => { Sound.ensure(); if (!G.allow({ kind: 'next' })) { tip('Follow the Captain first!'); return; } if (G.callNextWave()) Sound.play('click'); };
-  $('btnSpeed').onclick = () => { G.setSpeed(G.speed === 1 ? 2 : 1); $('btnSpeed').innerHTML = G.speed + '&times;'; Sound.play('click'); };
+  $('btnSpeed').onclick = () => { G.setSpeed(G.speed === 1 ? 2 : G.speed === 2 ? 0.5 : 1); $('btnSpeed').innerHTML = (G.speed === 0.5 ? '½' : G.speed) + '&times;'; Sound.play('click'); };
   $('btnPause').onclick = () => pauseMenu();
 
   function pauseMenu() {
@@ -471,12 +618,13 @@
     $('pRe').onclick = () => { closeModal(); beginGame(); };
     $('pMus').onclick = e => { save.music = !save.music; Sound.setMusic(save.music); if (save.music) Sound.startMusic(); persist(); e.target.textContent = 'Music: ' + (save.music ? 'On' : 'Off'); };
     $('pSfx').onclick = e => { save.sfx = !save.sfx; Sound.setSfx(save.sfx); persist(); e.target.textContent = 'Sound FX: ' + (save.sfx ? 'On' : 'Off'); };
-    $('pMap').onclick = () => { closeModal(); G.paused = false; toHub(); };
+    $('pMap').onclick = () => { closeModal(); G.paused = false; persist(); lvl.endless ? toEndless() : toHub(); };
   }
   document.addEventListener('visibilitychange', () => { if (document.hidden && current === 'game' && G.state !== 'won' && G.state !== 'lost' && $('modal').classList.contains('hidden')) pauseMenu(); });
   addEventListener('keydown', e => {
     if (current !== 'game' || !$('modal').classList.contains('hidden')) return;
-    if (e.key >= '1' && e.key <= '6') { const k = G.avail[+e.key - 1]; if (k) G.setPlacing(k); }
+    if (e.key >= '1' && e.key <= '9') { const k = G.avail[+e.key - 1]; if (k) G.setPlacing(k); }
+    else if (e.key.toLowerCase() === 'h') $('btnHint').click();
     else if (e.key === ' ') { e.preventDefault(); $('btnNext').click(); }
     else if (e.key.toLowerCase() === 'p') pauseMenu();
     else if (e.key === 'Escape') { G.placing = null; G.select(null); syncCards(); }
@@ -521,32 +669,63 @@
   }
 
   /* ----- finish ----- */
+  function awardXP(amount) {
+    const ups = [];
+    G.avail.forEach(k => { const before = crewLevel(k); save.xp[k] = (save.xp[k] || 0) + amount; const after = crewLevel(k); if (after > before) ups.push(CREW[k].name + ' → Lv ' + after); });
+    return `<div class="xp">+${amount} XP for the squad${ups.length ? `<br><b>LEVEL UP!</b> ${ups.join(', ')} — spend points in Crew` : ''}</div>`;
+  }
+  const medalHtml = list => list.length ? `<div class="reward">MEDAL${list.length > 1 ? 'S' : ''}: ${list.map(m => m.icon + ' ' + m.name).join(', ')}</div>` : '';
   function onEnd(r) {
-    if (!r.won) {
-      save.losses[lvl.id] = (save.losses[lvl.id] || 0) + 1; persist();
-      const tips = ['Guards (Brick, Tank) must stand on the floor path. Shooters need the raised decks.', 'Promote crewmates — it makes them much stronger.', 'Armored foes shrug off bullets. Sparky’s electricity ignores armor!', 'Flying foes can’t be blocked. Put shooters near the reactor.', 'Skills are powerful — tap a crewmate when the star lights up.', 'Lumi keeps guards alive. Put her on a deck near your front line.'];
-      const hard = (save.losses[lvl.id] || 0) >= 2 && save.diff !== 'crew';
+    if (lvl.endless) {
+      const waves = Math.max(0, r.waves || 0), prevBest = save.endless[lvl.id] || 0; save.endless[lvl.id] = Math.max(prevBest, waves);
+      const xp = awardXP(Math.max(8, waves * XP_GAIN.endlessWave)); persist(); const medals = checkMedals(true); persist(); buzz(300);
       setTimeout(() => {
-        modal(`<h2 class="lose">The Signal got through</h2><p>${tips[(lvl.id + (save.losses[lvl.id] || 0)) % tips.length]}</p>${hard ? '<p class="reward">Too tough? Try “Crew” difficulty in Settings.</p>' : ''}<div class="row"><button class="btn primary" id="rRe">Try again</button>${needsSquad() ? '<button class="btn" id="rSq">Change squad</button>' : ''}<button class="btn" id="rMap">Mission map</button></div>`);
+        modal(`<h2 class="${waves > prevBest ? 'win' : 'lose'}">${waves > prevBest ? 'New best!' : 'Run over'}</h2><p>${lvl.name} · Endless</p><div class="bigscore">♾ ${waves}<small>wave${waves === 1 ? '' : 's'} survived</small></div>
+          <p>Best on this map: wave ${save.endless[lvl.id]} · Foes stopped: ${G.kills}</p>${xp}${medalHtml(medals)}
+          <div class="row"><button class="btn primary" id="rRe">Try again</button><button class="btn" id="rEnd">Endless maps</button></div>`);
+        $('rRe').onclick = () => beginGame(); $('rEnd').onclick = () => { closeModal(); toEndless(); };
+        if (medals.length) Sound.play('medal');
+      }, 900);
+      return;
+    }
+    if (!r.won) {
+      save.losses[lvl.id] = (save.losses[lvl.id] || 0) + 1; const xp = awardXP(XP_GAIN.loss); persist(); buzz(300);
+      const tips = ['Guards (Brick, Tank) must stand on the floor path. Shooters need the raised decks.', 'Promote crewmates — it makes them much stronger.', 'Armored foes shrug off bullets. Sparky’s electricity ignores armor!', 'Flying foes can’t be blocked. Put shooters near the reactor.', 'Skills are powerful — tap a crewmate when the star lights up.', 'Lumi keeps guards alive. Put her on a deck near your front line.', 'Stuck? Tap the 💡 button for a hint.', 'Train your crew between missions: spend upgrade points in the Crew screen.'];
+      const hard = (save.losses[lvl.id] || 0) >= 2 && !DIFFICULTY[save.diff].easy;
+      setTimeout(() => {
+        modal(`<h2 class="lose">The Signal got through</h2><p>${tips[(lvl.id + (save.losses[lvl.id] || 0)) % tips.length]}</p>${hard ? '<p class="reward">Too tough? Try “Crew” or “Story” difficulty in Settings.</p>' : ''}${xp}<div class="row"><button class="btn primary" id="rRe">Try again</button>${needsBrief() ? `<button class="btn" id="rSq">${needsSquad() ? 'Change squad' : 'Briefing'}</button>` : ''}<button class="btn" id="rMap">Mission map</button></div>`);
         $('rRe').onclick = () => beginGame(); $('rMap').onclick = () => { closeModal(); toHub(); };
         if ($('rSq')) $('rSq').onclick = () => { closeModal(); toSquad(); };
       }, 900);
       return;
     }
-    const prev = save.stars[lvl.id] || 0, before = totalStars(); save.stars[lvl.id] = Math.max(prev, r.stars); if (lvl.id === LEVELS.length) save.ended = true; persist();
-    const newLooks = Object.values(LOOKS).flat().filter(i => i.stars > before && i.stars <= totalStars());
-    const styleMsg = newLooks.length ? `<div class="reward">NEW STYLE${newLooks.length > 1 ? 'S' : ''}: ${newLooks.map(i => i.name).join(', ')}! Visit the Wardrobe.</div>` : '';
+    const prev = save.stars[lvl.id] || 0, before = totalStars(), boltsBefore = totalBolts(); save.stars[lvl.id] = Math.max(prev, r.stars); if (lvl.id === LEVELS.length) save.ended = true;
+    // challenges won → ⚡ bolts; medal flags
+    const beaten = save.mods[lvl.id] || []; const newBolts = chosenMods.filter(k => !beaten.includes(k)); if (newBolts.length) save.mods[lvl.id] = beaten.concat(newBolts);
+    if (r.lives >= G.maxLives) save.flags.flawless = true;
+    if (lvl.id >= 4 && G.deployed <= 4) save.flags.minimal = true;
+    if (chosenMods.length >= 3) save.flags.dare = true;
+    if (save.diff === 'impostor' && lvl.chapter >= 3) save.flags.imp = true;
+    if (lvl.finale) save.flags.ch3 = true; if (lvl.finale2) save.flags.ch4 = true;
+    const xp = awardXP(XP_GAIN.win + XP_GAIN.star * r.stars); persist();
+    const medals = checkMedals(true); buzz([60, 40, 60, 40, 140]);
+    const newLooks = Object.values(LOOKS).flat().filter(i => (i.stars > 0 || i.bolts) && lookOpen(i, totalStars(), totalBolts()) && !lookOpen(i, before, boltsBefore));
+    const styleMsg = newLooks.length ? `<div class="reward">NEW STYLE${newLooks.length > 1 ? 'S' : ''}: ${newLooks.map(i => i.name).join(', ')}! Visit the Crew screen.</div>` : '';
+    const boltMsg = newBolts.length ? `<div class="reward bolt">⚡ +${newBolts.length} challenge bolt${newBolts.length > 1 ? 's' : ''}: ${newBolts.map(k => MODIFIERS[k].name).join(', ')}</div>` : '';
     const nxt = LEVELS.find(l => l.id === lvl.id + 1), reward = nxt && nxt.newCrew && !prev ? `<div class="reward">NEW CREWMATE: ${CREW[nxt.newCrew].name} the ${CREW[nxt.newCrew].role}!</div>` : '';
+    const endMsg = lvl.id === ENDLESS.unlockAfter && !prev ? '<div class="reward">♾ ENDLESS MODE unlocked on the mission map!</div>' : '';
     setTimeout(() => {
       modal(`<h2 class="win">Mission Complete!</h2><p>${lvl.name}</p><div class="bigstars">${[1, 2, 3].map(n => `<i class="${n <= r.stars ? 'on' : ''}" style="animation-delay:${n * .25}s">★</i>`).join('')}</div>
-        <p>Ship health left: ${r.lives}/${G.maxLives} · Foes stopped: ${G.kills}</p>${reward}${styleMsg}
+        <p>Ship health left: ${r.lives}/${G.maxLives} · Foes stopped: ${G.kills}</p>${boltMsg}${reward}${endMsg}${styleMsg}${xp}${medalHtml(medals)}
         <div class="row"><button class="btn primary" id="rGo">${!prev ? 'Continue the story' : 'Mission map'}</button><button class="btn" id="rRe">Play again</button></div>`);
       $('rRe').onclick = () => beginGame();
       $('rGo').onclick = () => { closeModal(); if (!prev && lvl.post) dialog(lvl.post, lvl, afterStory); else afterStory(); };
+      if (medals.length) setTimeout(() => Sound.play('medal'), 900);
     }, 1200);
   }
   function afterStory() {
     if (lvl.finale && !save.epilogue) { save.epilogue = true; persist(); cinematic(EPILOGUE, toHub); }
+    else if (lvl.finale2 && !save.epilogue2) { save.epilogue2 = true; persist(); cinematic(EPILOGUE2, toHub); }
     else toHub();
   }
 
@@ -608,5 +787,5 @@
   if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !TEST) {
     addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => { }));
   }
-  if (TEST) window.__t = { G, save: () => save, playLevel, toSquad, Wardrobe, squad: () => squad, toHub, LEVELS, beginGame, setLevel: l => { lvl = l; }, persist, unlock: () => { LEVELS.forEach(l => { save.stars[l.id] = save.stars[l.id] || 1; }); persist(); } };
+  if (TEST) window.__t = { G, save: () => save, playLevel, toSquad, Wardrobe, squad: () => squad, toHub, toEndless, toLog, toSettings, checkMedals, mods: m => { if (m) chosenMods = m; return chosenMods; }, lvl: () => lvl, LEVELS, beginGame, setLevel: l => { lvl = l; }, persist, unlock: () => { LEVELS.forEach(l => { save.stars[l.id] = save.stars[l.id] || 1; }); persist(); } };
 })();

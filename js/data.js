@@ -50,9 +50,33 @@ const CREW = {
     skill: { name: 'Freeze Ping', desc: 'Nearby foes crawl at quarter speed for 5 seconds.', sp: 20, dur: 5 },
     blurb: 'Slows foes with her pings and REVEALS sneaky shapeshifters.',
     tip: 'Place on high decks.'
+  },
+  /* ---- Chapter 4 crew ---- */
+  wrench: {
+    name: 'Wrench', role: 'Engineer', color: '#f07a1a', hat: 'welder', ground: 'high',
+    cost: 11, hp: 330, atk: 0, repair: 60, interval: 1.2, def: 6, block: 0, range: 1.6, builds: true,
+    skill: { name: 'Reinforce', desc: 'Fully repairs the barricade and lets it hold 3 foes for 12 seconds.', sp: 20, dur: 12 },
+    blurb: 'Builds a barricade on the nearest floor path that holds back two foes, and keeps it patched up.',
+    tip: 'Place on a high deck right next to the floor path.'
+  },
+  marshal: {
+    name: 'Marshal', role: 'Sheriff', color: '#8a5a2b', hat: 'cowboy', ground: 'high',
+    cost: 13, hp: 280, atk: 150, interval: 2.4, def: 4, block: 0, range: 4.6, pierce: true, strongest: true,
+    skill: { name: 'Dead Eye', desc: 'Fires three times as fast for 6 seconds.', sp: 22, dur: 6 },
+    blurb: 'Huge range. Slow, powerful shots that punch through half of any armor — and always at the toughest foe.',
+    tip: 'Place on any high deck — she can reach almost anywhere.'
+  },
+  bubbles: {
+    name: 'Bubbles', role: 'Guardian', color: '#ff6fb5', hat: 'bubble', ground: 'high',
+    cost: 10, hp: 360, atk: 0, interval: 4.5, def: 6, block: 0, range: 2.6, shields: true,
+    skill: { name: 'Bubble Party', desc: 'Every crewmate nearby gets a bubble shield.', sp: 24, dur: 0 },
+    blurb: 'Wraps a friend in a bubble that soaks up the next hit completely. Loves big guards.',
+    tip: 'Place on a high deck near your guards.'
   }
 };
-const CREW_ORDER = ['brick', 'tank', 'rook', 'lumi', 'sparky', 'echo'];
+const CREW_ORDER = ['brick', 'tank', 'rook', 'lumi', 'sparky', 'echo', 'wrench', 'marshal', 'bubbles'];
+// Wrench's barricade: a crew-like blocker that lives on a floor tile
+const BARRICADE = { name: 'Barricade', hp: 650, def: 25, block: 2, buildT: 2.5, rebuildT: 7 };
 const PROMOTE_MAX = 2;
 
 /* ---------- Foes (the "mobs") ---------- */
@@ -117,6 +141,33 @@ const FOES = {
     ],
     lore: 'The Signal’s lonely center. It isn’t angry. It just doesn’t know how to say hello.',
     tip: 'FINAL BOSS. Summons help at 75%, 50% and 25%.'
+  },
+  /* ---- Chapter 4 foes ---- */
+  mite: {
+    name: 'Rock Mite', hp: 240, spd: 0.95, atk: 30, interval: 1.0, def: 20, weight: 1, leak: 1, size: 0.62, burrow: { up: 2.6, down: 1.8 },
+    lore: 'Chews through asteroid rock like it’s cookie dough. Pops up, pops down, pops up again.',
+    tip: 'Burrows UNDER guards. Hit it while it’s up!'
+  },
+  leech: {
+    name: 'Power Leech', hp: 300, spd: 0.6, atk: 0, interval: 1, def: 5, weight: 1, leak: 1, size: 0.8, flying: true, drain: 0.3,
+    lore: 'Floats toward anything that hums, then drinks the power right out of it.',
+    tip: 'Flies, and drains your DP while it’s alive. Shoot it fast!'
+  },
+  golem: {
+    name: 'Ore Golem', hp: 1050, spd: 0.38, atk: 100, interval: 1.8, def: 60, weight: 2, leak: 2, size: 1.2, steady: true,
+    lore: 'A pile of ore that decided to get up and walk. It does not stop for pings.',
+    tip: 'Very armored and can’t be slowed. Marshal and Sparky crack it.'
+  },
+  bomber: {
+    name: 'Blast Beetle', hp: 200, spd: 1.05, atk: 240, interval: 1, def: 0, weight: 1, leak: 1, size: 0.7, explodes: 1.25,
+    lore: 'Carries a little blasting charge on its back and is VERY excited about it.',
+    tip: 'Explodes when it reaches a guard. Bubble shields soak the blast!'
+  },
+  foreman: {
+    name: 'The Foreman', hp: 9000, spd: 0.26, atk: 180, interval: 2.0, def: 40, weight: 3, leak: 8, size: 1.7, boss: true,
+    drill: { every: 9, dur: 2.4, spd: 1.3 }, summon: { type: 'mite', n: 2, every: 8 },
+    lore: 'The rig’s giant drill, wearing the last loud piece of the Signal like a crown.',
+    tip: 'BOSS. Drills underground to dodge and calls Rock Mites.'
   }
 };
 
@@ -156,6 +207,11 @@ const THEMES = {
     name: 'The Hollow', bg: '#0a0414', wall: '#2a1740', wallTop: '#4a2a72', floorA: '#3a2b5a', floorB: '#33264f', seam: '#241a3b',
     path: '#1b1030', pathEdge: '#0d0719', high: '#6a58a0', highEdge: '#2f2552', arrow: 'rgba(200,140,255,.55)', glow: '#d58bff',
     decor: ['eye', 'crystal', 'static', 'crystal'], star: true
+  },
+  rig: {
+    name: 'Ferrous Deep Mining Rig', bg: '#120c08', wall: '#4a3426', wallTop: '#6e4e38', floorA: '#6f6762', floorB: '#675f5a', seam: '#4a423f',
+    path: '#3b302a', pathEdge: '#1e1713', high: '#b3a493', highEdge: '#5a4c40', arrow: 'rgba(255,170,60,.6)', glow: '#ffa63d',
+    decor: ['ore', 'drill', 'cart', 'rock'], wallKind: 'rock', sky: ['#1b1210', '#3a2216']
   }
 };
 
@@ -171,7 +227,12 @@ const CAST = {
   hollow: { name: '???', color: '#2a1a46', hat: 'none', ghost: true },
   kestrel: { name: 'Kestrel', color: '#ff8a2a', hat: 'cap' },
   mimic: { name: 'Fake Juno', color: '#e8eef8', hat: 'captain', dark: true },
-  ship: { name: 'HALCYON', color: '#6b7a90', hat: 'none', ai: true }
+  ship: { name: 'HALCYON', color: '#6b7a90', hat: 'none', ai: true },
+  wrench: { name: 'Wrench', color: '#f07a1a', hat: 'welder' },
+  marshal: { name: 'Marshal', color: '#8a5a2b', hat: 'cowboy' },
+  bubbles: { name: 'Bubbles', color: '#ff6fb5', hat: 'bubble' },
+  friend: { name: 'Hollow', color: '#9a7ae0', hat: 'none', ghost: true },
+  static: { name: 'The Static', color: '#3a2a20', hat: 'none', dark: true }
 };
 
 /* ---------- The Prologue ---------- */
@@ -186,6 +247,11 @@ const EPILOGUE = [
   'The Signal went quiet — not silent,\nbut the quiet of someone finally heard.',
   'The HALCYON turned for home,\ncarrying two crews\nand one very new friend.',
   'And somewhere out past the last star,\na second signal blinked on.\n\nIt said: “Hello?”'
+];
+const EPILOGUE2 = [
+  'The Ferrous Deep lit up from top to bottom,\nevery window full of miners waving.',
+  'The Hollow was whole again —\nnot loud, not lonely.\nJust listening.',
+  'And when the HALCYON finally docked,\nthe whole crew stepped off together.\n\nThe Signal said: “Thank you.”'
 ];
 
 /* ---------- Tutorial script (Level 1) ---------- */
@@ -500,17 +566,145 @@ const LEVELS = [
       ['brick', 'HEY.']
     ],
     radio: { 6: ['juno', 'That’s the Heart. It will call for help three times. Armor-breakers ready!'] }
+  },
+
+  /* ================= CHAPTER 4: THE LONG WAY HOME ================= */
+  {
+    id: 11, chapter: 4, name: 'Hello, Ferrous Deep', place: 'Cargo Dock · Ferrous Deep', theme: 'rig',
+    cols: 11, rows: 6, startDP: 22, lives: 7, scale: 0.9, crew: ['brick', 'tank', 'rook', 'lumi', 'sparky', 'echo', 'wrench'], newCrew: 'wrench',
+    routes: [R([[0, 1], [3, 1], [3, 4], [7, 4], [7, 1], [10, 1]]), R([[0, 5], [10, 1]], true)],
+    high: [[1, 2], [2, 2], [4, 2], [5, 2], [5, 3], [6, 2], [4, 5], [6, 5], [8, 2], [8, 3], [9, 2], [2, 0], [5, 0]],
+    walls: [[0, 0], [10, 5], [0, 4]],
+    doors: [[5, 4]], sabo: { 3: 'lights' },
+    waves: [
+      W(22, ['crawler', 8, 1.0], ['mite', 2, 3, 0, 4]),
+      W(24, ['mite', 5, 1.8], ['mimic', 3, 2.4, 0, 4]),
+      W(26, ['mite', 6, 1.4], ['drone', 3, 2, 1, 3], ['plated', 1, 1, 0, 10]),
+      W(28, ['shifter', 5, 1.4], ['mite', 8, 1.0, 0, 4], ['ghost', 4, 1.4, 1, 6]),
+      W(30, ['plated', 3, 3.5], ['mite', 10, 0.9, 0, 6], ['drone', 5, 1.4, 1, 4]),
+      W(0, ['mite', 12, 0.8], ['plated', 3, 3, 0, 6], ['spore', 3, 3, 0, 12], ['ghost', 6, 1.0, 1, 8])
+    ],
+    pre: [
+      ['ship', 'Incoming transmission. Origin: the Ferrous Deep mining rig. Content: “...hello? Is anybody out there? Please?”'],
+      ['juno', 'That’s the second signal. It isn’t the Hollow this time — it’s a person. Set a course.'],
+      ['friend', '(softly) I know the static around that voice. When I went quiet, little pieces of me scattered. Some of them are still shouting “stay”.'],
+      ['wrench', 'Oh, thank goodness — a real ship! I’m Wrench, rig engineer. The machines went haywire and the miners are hiding down below. And these Rock Mites keep digging UNDER my barricades!'],
+      ['juno', 'Wrench, you build — we’ll hold. Commander, Rock Mites burrow under guards. Hit them when they pop up.']
+    ],
+    post: [
+      ['wrench', 'First time this dock has been quiet all week. Count me in — my barricades don’t mind getting chewed on.'],
+      ['friend', 'The loudest piece of me is deeper down. In the big drill. It thinks it’s keeping the miners safe by keeping them in.'],
+      ['marshal', '(over the radio) Whoever’s up there making that racket — a Magnet Storm’s rolling in. Get to the ore lift and I’ll cover you.'],
+      ['juno', 'Who was THAT?'],
+      ['wrench', 'Marshal. The rig’s sheriff. Best shot in the belt. Terrible at hellos.']
+    ],
+    radio: { 2: ['wrench', 'See the dirt mounds? Mites underground! Wait for them to pop up.'], 5: ['brick', 'I keep blocking them and they keep going UNDER me! Rude!'] }
+  },
+  {
+    id: 12, chapter: 4, name: 'Magnet Storm', place: 'Ore Lift · Ferrous Deep', theme: 'rig',
+    cols: 12, rows: 7, startDP: 26, lives: 7, scale: 0.85, crew: ['brick', 'tank', 'rook', 'lumi', 'sparky', 'echo', 'wrench', 'marshal'], newCrew: 'marshal',
+    routes: [R([[0, 2], [5, 2], [5, 5], [11, 5]]), R([[11, 0], [8, 0], [8, 5]]), R([[0, 0], [11, 5]], true)],
+    high: [[2, 1], [3, 3], [4, 1], [4, 3], [6, 3], [6, 4], [7, 1], [7, 3], [9, 2], [9, 4], [10, 4], [6, 6], [9, 6], [1, 3]],
+    walls: [[11, 6], [0, 6], [11, 1]],
+    doors: [[3, 2], [8, 2]], sabo: { 2: 'o2', 5: 'reactor' },
+    waves: [
+      W(22, ['mimic', 5, 1.6], ['leech', 2, 3, 2, 4]),
+      W(24, ['golem', 1, 1, 0], ['crawler', 10, 0.8, 1, 3], ['leech', 3, 2.4, 2, 6]),
+      W(26, ['mite', 6, 1.4, 1], ['golem', 2, 5, 0, 2], ['drone', 3, 2, 2, 6]),
+      W(28, ['shifter', 6, 1.2, 0], ['leech', 5, 1.6, 2, 3], ['plated', 2, 4, 1, 6]),
+      W(30, ['golem', 3, 4, 0], ['mite', 8, 1.0, 1, 2], ['leech', 6, 1.3, 2, 8]),
+      W(32, ['plated', 4, 3, 1], ['golem', 2, 5, 0, 4], ['shifter', 6, 1.1, 0, 10], ['ghost', 8, 1, 2, 6]),
+      W(0, ['golem', 4, 3.5, 0], ['leech', 8, 1.0, 2, 2], ['mite', 12, 0.7, 1, 6], ['brute', 1, 1, 0, 20])
+    ],
+    pre: [
+      ['marshal', 'Name’s Marshal. Keep your heads down — the storm pulls every loose bolt in the belt toward this lift. Including the walking ones.'],
+      ['sparky', 'Is that a MAGNET STORM?! My hair is standing up! I don’t even HAVE hair!'],
+      ['marshal', 'Power Leeches ride the storm. They float in and drink your power dry, so knock ’em out quick. And the Ore Golems? Armor like a bank vault.'],
+      ['marshal', 'Lucky for you, I don’t miss.']
+    ],
+    post: [
+      ['marshal', '...Fine. You’re good. Real good.'],
+      ['bubbles', '(from a vent) Is it safe? Marshal? Are the big rock guys gone? I made everybody bubble shields but they keep POPPING!'],
+      ['wrench', 'Bubbles! She’s the miners’ kid — been keeping everybody safe down in the lower decks.'],
+      ['juno', 'Then let’s go and get them. Bubbles, stay put. We’re coming down.']
+    ],
+    radio: { 1: ['marshal', 'Leeches! Pop them before they drain your power.'], 2: ['sparky', 'Golems shrug off pings. Zap ’em, or let Marshal handle it!'], 7: ['juno', 'The Face Thief again?! Just a leftover echo. Same trick, same answer.'] }
+  },
+  {
+    id: 13, chapter: 4, name: 'Pressure Point', place: 'Lower Decks · Ferrous Deep', theme: 'rig',
+    cols: 12, rows: 7, startDP: 30, lives: 7, scale: 0.72, crew: ['brick', 'tank', 'rook', 'lumi', 'sparky', 'echo', 'wrench', 'marshal', 'bubbles'], newCrew: 'bubbles',
+    routes: [R([[0, 1], [6, 1], [6, 3], [2, 3], [2, 5], [11, 5]]), R([[11, 0], [9, 0], [9, 5]]), R([[0, 6], [11, 5]], true)],
+    high: [[1, 2], [3, 2], [5, 2], [7, 2], [3, 4], [4, 4], [6, 4], [8, 4], [10, 4], [8, 1], [10, 1], [1, 4], [7, 6], [4, 6]],
+    walls: [[0, 0], [11, 6], [0, 4]],
+    doors: [[4, 1], [9, 3]], sabo: { 3: 'lights', 6: 'reactor' },
+    waves: [
+      W(22, ['bomber', 3, 2.5], ['crawler', 8, 1.0, 1, 3]),
+      W(24, ['bomber', 4, 1.8, 1], ['mimic', 4, 2, 0, 3], ['leech', 2, 3, 2, 6]),
+      W(26, ['mite', 6, 1.2, 0], ['bomber', 5, 1.5, 1, 4], ['golem', 1, 1, 0, 8]),
+      W(28, ['plated', 3, 3, 0], ['bomber', 6, 1.2, 1, 2], ['ghost', 6, 1.2, 2, 4], ['shifter', 4, 1.4, 0, 10]),
+      W(30, ['golem', 2, 5, 1], ['bomber', 8, 1.0, 0, 4], ['leech', 6, 1.2, 2, 2], ['spore', 3, 3, 0, 12]),
+      W(32, ['mite', 10, 0.8, 0], ['bomber', 8, 0.9, 1, 4], ['plated', 4, 3, 0, 8], ['drone', 6, 1.2, 2, 6]),
+      W(0, ['golem', 3, 4, 0], ['bomber', 10, 0.8, 1], ['sporemother', 1, 1, 0, 16], ['leech', 8, 1, 2, 6], ['mite', 10, 0.8, 1, 10])
+    ],
+    pre: [
+      ['bubbles', 'Hi! I’m Bubbles! I’m eight and three-quarters! The beetles have little bombs on their backs and they go BOOM when they touch you!'],
+      ['tank', '...I would like to not be touched by those.'],
+      ['bubbles', 'That’s what my bubbles are for! A bubble eats one boom. Or one bonk. Or one anything!'],
+      ['juno', 'Shield the guards, Bubbles. Commander — the miners are right behind us. Nothing gets past this deck.']
+    ],
+    post: [
+      ['bubbles', 'We did it! Everybody’s safe! Marshal, did you see? I bubbled TANK!'],
+      ['marshal', 'I saw, kid.'],
+      ['friend', 'There it is. The last loud piece of me — inside the big drill. It’s scared. It thinks if everyone stays down here, nobody can ever leave it.'],
+      ['wrench', 'The Foreman. Biggest drill on the rig. If that thing wakes up, it’ll dig straight through the lower decks.'],
+      ['juno', 'Then we stop it at the core. Last stop, everyone. Then we go home.']
+    ],
+    radio: { 1: ['bubbles', 'BEETLES! Bubble your guards so the booms bounce off!'], 7: ['lumi', 'The Spore Mother? Down HERE? The static must have carried a spore. Stay focused!'] }
+  },
+  {
+    id: 14, chapter: 4, name: 'The Foreman', place: 'Core Shaft · Ferrous Deep', theme: 'rig', finale2: true,
+    cols: 12, rows: 7, startDP: 40, lives: 8, scale: 0.62, crew: ['brick', 'tank', 'rook', 'lumi', 'sparky', 'echo', 'wrench', 'marshal', 'bubbles'],
+    routes: [R([[0, 0], [3, 0], [3, 3], [0, 3], [0, 6], [6, 6], [6, 3], [9, 3], [9, 6], [11, 6]]), R([[11, 0], [8, 0], [8, 3]]), R([[0, 1], [11, 6]], true)],
+    high: [[1, 1], [2, 1], [1, 2], [4, 2], [4, 4], [1, 4], [1, 5], [2, 5], [5, 4], [5, 5], [7, 4], [7, 5], [8, 5], [7, 2], [10, 4], [10, 5], [9, 1]],
+    walls: [[11, 3], [5, 1]],
+    doors: [[3, 2], [6, 4], [10, 0]], sabo: { 2: 'lights', 4: 'o2', 6: 'reactor' },
+    waves: [
+      W(22, ['mite', 8, 1.0, 0], ['bomber', 4, 1.6, 1, 4]),
+      W(24, ['golem', 2, 4, 0], ['leech', 4, 1.8, 2, 3], ['crawler', 12, 0.6, 1, 4]),
+      W(26, ['bomber', 8, 1.0, 1], ['plated', 3, 3, 0, 4], ['ghost', 6, 1.2, 2, 6]),
+      W(28, ['mite', 12, 0.8, 0], ['golem', 2, 4, 1, 6], ['leech', 6, 1.2, 2, 4]),
+      W(30, ['shifter', 8, 1.0, 0], ['bomber', 10, 0.8, 1, 4], ['drone', 6, 1.2, 2, 8], ['golem', 2, 5, 0, 14]),
+      W(0, ['foreman', 1, 1, 0], ['mite', 12, 0.9, 1, 10], ['bomber', 10, 1.0, 0, 22], ['leech', 8, 1.2, 2, 14], ['golem', 3, 5, 1, 26])
+    ],
+    pre: [
+      ['static', 'STAY DOWN. STAY SAFE. STAY. STAY. STAY.'],
+      ['friend', 'That’s me. The part of me that never learned anything. I’m sorry.'],
+      ['echo', 'Don’t be. You learned. It can too — it just needs to be heard first.'],
+      ['marshal', 'It drills underground to dodge my shots. When it surfaces, everybody let it have it.'],
+      ['juno', 'All hands. Wren — bring them home.']
+    ],
+    post: [
+      ['static', '...stay?'],
+      ['friend', 'Come here. It’s okay. We don’t have to keep anyone anymore. We get to visit.'],
+      ['wrench', 'The drill’s powering down. Miners are coming up the lift. Captain — they’re CHEERING.'],
+      ['bubbles', 'Can Hollow come to my class? For show and tell?'],
+      ['friend', '...I would like that very much.'],
+      ['juno', 'HALCYON, set a course. Home — the long way round, with everybody aboard.']
+    ],
+    radio: { 6: ['wrench', 'The Foreman! It drills under everything — wait for it to surface, then hit it hard!'] }
   }
 ];
 
 const CHAPTERS = [
   { id: 1, name: 'Wake Up', sub: 'The HALCYON stirs', color: '#42e8ff' },
   { id: 2, name: 'The Cold Signal', sub: 'Something wearing faces', color: '#c6a0ff' },
-  { id: 3, name: 'The Hollow', sub: 'Who is knocking?', color: '#ff8a6b' }
+  { id: 3, name: 'The Hollow', sub: 'Who is knocking?', color: '#ff8a6b' },
+  { id: 4, name: 'The Long Way Home', sub: 'Somebody said hello', color: '#ffa63d' }
 ];
 
 const DIFFICULTY = {
-  crew: { name: 'Crew', desc: 'Relaxed and friendly. Perfect for little commanders.', hp: 0.7, atk: 0.7, dp: 1.4, startDP: 6, lives: 3 },
+  story: { name: 'Story', desc: 'Just enjoy the adventure — the ship can’t be destroyed. Lost hearts still cost stars.', hp: 0.55, atk: 0.5, dp: 1.6, startDP: 10, lives: 3, easy: true, safe: true },
+  crew: { name: 'Crew', desc: 'Relaxed and friendly. Perfect for little commanders.', hp: 0.7, atk: 0.7, dp: 1.4, startDP: 6, lives: 3, easy: true },
   captain: { name: 'Captain', desc: 'The intended experience.', hp: 1, atk: 1, dp: 1, startDP: 0, lives: 0 },
   impostor: { name: 'Impostor', desc: 'Tough foes. Slow DP. For grown-up commanders.', hp: 1.4, atk: 1.25, dp: 0.9, startDP: 0, lives: -2 }
 };
@@ -552,8 +746,8 @@ LEVELS.forEach(l => Object.assign(l, LEVEL_EXTRAS[l.id] || {}));
 /* ---------- Squad ----------
    Before a mission with more crew than seats, the player picks a squad. The newest crewmate always comes along. */
 const SQUAD_SIZE = 4;
-const SQUAD_PREF = ['brick', 'rook', 'sparky', 'lumi', 'tank', 'echo']; // the suggested squad, in order
-const squadSize = (level, diffKey) => Math.min(level.crew.length, (level.squad || (level.chapter >= 3 ? 5 : SQUAD_SIZE)) + (diffKey === 'crew' ? 1 : 0));
+const SQUAD_PREF = ['brick', 'rook', 'sparky', 'lumi', 'marshal', 'tank', 'bubbles', 'echo', 'wrench']; // the suggested squad, in order
+const squadSize = (level, diffKey) => Math.min(level.crew.length, (level.squad || (level.chapter >= 3 ? 5 : SQUAD_SIZE)) + (DIFFICULTY[diffKey] && DIFFICULTY[diffKey].easy ? 1 : 0));
 
 /* ---------- Wardrobe (unlocked with stars) ---------- */
 const LOOKS = {
@@ -568,7 +762,9 @@ const LOOKS = {
     { id: 'horns', name: 'Space Horns', stars: 16 },
     { id: 'mushroom', name: 'Fungle Cap', stars: 19 },
     { id: 'halo', name: 'Halo', stars: 22 },
-    { id: 'crown', name: 'Crown', stars: 26 }
+    { id: 'crown', name: 'Crown', stars: 26 },
+    { id: 'laurel', name: 'Champion Laurel', stars: 0, bolts: 6 },
+    { id: 'hardcore', name: 'Impostor Hunter', stars: 0, bolts: 15 }
   ],
   visor: [
     { id: 'sky', name: 'Sky', stars: 0, c: ['#d7fbff', '#6bc9e6'] },
@@ -576,7 +772,9 @@ const LOOKS = {
     { id: 'rose', name: 'Rose', stars: 7, c: ['#ffe0ef', '#ff6fae'] },
     { id: 'mint', name: 'Mint', stars: 11, c: ['#e2ffe9', '#3fd47a'] },
     { id: 'sunset', name: 'Sunset', stars: 15, c: ['#ffd36b', '#ff5a6a'] },
-    { id: 'nebula', name: 'Nebula', stars: 20, c: ['#c9a6ff', '#3a1a7a'] }
+    { id: 'nebula', name: 'Nebula', stars: 20, c: ['#c9a6ff', '#3a1a7a'] },
+    { id: 'chrome', name: 'Chrome', stars: 0, bolts: 3, c: ['#ffffff', '#7b8598'] },
+    { id: 'ember', name: 'Ember', stars: 34, c: ['#ffe2a8', '#ff6a1a'] }
   ],
   pet: [
     { id: 'none', name: 'No pet', stars: 0 },
@@ -584,9 +782,88 @@ const LOOKS = {
     { id: 'bot', name: 'Fix-It Bot', stars: 9 },
     { id: 'sporeling', name: 'Sporeling', stars: 12 },
     { id: 'wisp', name: 'Friendly Wisp', stars: 17 },
-    { id: 'starling', name: 'Starling', stars: 24 }
+    { id: 'starling', name: 'Starling', stars: 24 },
+    { id: 'drillbit', name: 'Drill Bit', stars: 30 },
+    { id: 'hollowpup', name: 'Little Hollow', stars: 0, bolts: 10 }
   ]
 };
+// a wardrobe item is unlocked by stars, or by ⚡ challenge bolts
+const lookOpen = (it, stars, bolts) => it.bolts ? bolts >= it.bolts : stars >= it.stars;
+
+/* ---------- Challenges (optional handicaps on missions you've already won) ----------
+   Each challenge you win a mission with earns one ⚡ bolt for that mission. */
+const MODIFIERS = {
+  fast: { name: 'Speedy Foes', icon: '💨', desc: 'Foes move 20% faster.' },
+  tough: { name: 'Thick Hides', icon: '🛡', desc: 'Foes have 30% more health.' },
+  poor: { name: 'Low Power', icon: '🔋', desc: 'DP refills 30% slower and you start with less.' },
+  glass: { name: 'Glass Hull', icon: '💔', desc: 'The ship has half as many hearts.' },
+  nomed: { name: 'No Medics', icon: '🚫', desc: 'Lumi and Bubbles stay home.', needs: l => l.crew.some(k => CREW[k].heal || CREW[k].shields) },
+  nodoors: { name: 'Jammed Doors', icon: '🔒', desc: 'Doors won’t close.', needs: l => !!(l.doors && l.doors.length) }
+};
+const modsFor = level => Object.keys(MODIFIERS).filter(k => !MODIFIERS[k].needs || MODIFIERS[k].needs(level));
+
+/* ---------- Crewmate training ----------
+   Crew earn XP from missions. Each level gives one point to spend on a small upgrade tree. */
+const UPGRADES = [
+  { id: 'tough', name: 'Tough', icon: '❤', desc: '+10% health', max: 3 },
+  { id: 'power', name: 'Power', icon: '⚔', desc: '+8% attack, healing and repairs', max: 3 },
+  { id: 'focus', name: 'Focus', icon: '★', desc: 'Skill charges 10% faster', max: 3 }
+];
+const XP_LEVELS = [0, 30, 90, 180, 300, 450, 630, 840, 1080, 1350];
+const XP_MAX_LEVEL = XP_LEVELS.length - 1;
+const xpLevel = xp => { let n = 0; while (n < XP_MAX_LEVEL && xp >= XP_LEVELS[n + 1]) n++; return n; };
+const XP_GAIN = { win: 20, star: 10, loss: 8, endlessWave: 4 };
+
+/* ---------- Medals ----------
+   test(m) gets { st: lifetime counters, flags, stars, bolts, best (endless), lvl (top crew level), looks (styles unlocked) } */
+const MEDALS = [
+  { id: 'first', icon: '🚀', name: 'Wide Awake', desc: 'Finish Mission 1.', test: m => m.stars >= 1 },
+  { id: 'flawless', icon: '💎', name: 'Not a Scratch', desc: 'Win a mission without losing a single heart.', test: m => m.flags.flawless },
+  { id: 'pest', icon: '🧹', name: 'Pest Control', desc: 'Stop 500 foes.', test: m => m.st.kills >= 500 },
+  { id: 'spores', icon: '🍄', name: 'Spore Sweeper', desc: 'Pop 100 Sporelets.', test: m => m.st.sporelet >= 100 },
+  { id: 'ghosts', icon: '👻', name: 'Ghost Buster', desc: 'Stop 100 Wisp Ghosts.', test: m => m.st.ghost >= 100 },
+  { id: 'doors', icon: '🚪', name: 'Door Slammer', desc: 'Slam doors 50 times.', test: m => m.st.doors >= 50 },
+  { id: 'fixer', icon: '🔧', name: 'Handy', desc: 'Fix 25 sabotages.', test: m => m.st.fixes >= 25 },
+  { id: 'cool', icon: '🧊', name: 'Cool Under Pressure', desc: 'Fix a Reactor Meltdown with under 5 seconds left.', test: m => m.flags.cool },
+  { id: 'skills', icon: '✨', name: 'Show-Off', desc: 'Use 100 skills.', test: m => m.st.skills >= 100 },
+  { id: 'brass', icon: '🎖', name: 'Top Brass', desc: 'Promote crewmates 50 times.', test: m => m.st.promotes >= 50 },
+  { id: 'minimal', icon: '🤏', name: 'Skeleton Crew', desc: 'Win Mission 4 or later with 4 or fewer crew deployed.', test: m => m.flags.minimal },
+  { id: 'thief', icon: '🎭', name: 'Face Off', desc: 'Defeat the Face Thief.', test: m => m.st.brute >= 1 },
+  { id: 'heart', icon: '💜', name: 'Heard', desc: 'Finish Chapter 3.', test: m => m.flags.ch3 },
+  { id: 'home', icon: '🏠', name: 'Home Again', desc: 'Finish Chapter 4.', test: m => m.flags.ch4 },
+  { id: 'stars30', icon: '⭐', name: 'Star Student', desc: 'Earn 30 stars.', test: m => m.stars >= 30 },
+  { id: 'stars42', icon: '🌟', name: 'Perfectionist', desc: 'Earn 3 stars on every mission.', test: m => m.stars >= LEVELS.length * 3 },
+  { id: 'bolts10', icon: '⚡', name: 'Challenger', desc: 'Earn 10 challenge bolts.', test: m => m.bolts >= 10 },
+  { id: 'dare', icon: '🔥', name: 'Daredevil', desc: 'Win a mission with 3 or more challenges on.', test: m => m.flags.dare },
+  { id: 'imp', icon: '😈', name: 'Impostor Slayer', desc: 'Win a Chapter 3 or 4 mission on Impostor.', test: m => m.flags.imp },
+  { id: 'endless10', icon: '♾', name: 'Survivor', desc: 'Reach wave 10 in Endless.', test: m => m.best >= 10 },
+  { id: 'endless25', icon: '🏆', name: 'Legend', desc: 'Reach wave 25 in Endless.', test: m => m.best >= 25 },
+  { id: 'vet', icon: '🎓', name: 'Veteran', desc: 'Train a crewmate to level 5.', test: m => m.lvl >= 5 },
+  { id: 'fashion', icon: '🎩', name: 'Fashionista', desc: 'Unlock 10 styles.', test: m => m.looks >= 10 }
+];
+
+/* ---------- Endless mode ----------
+   Remixed waves on any map you've cleared. Unlocks after Chapter 1. */
+const ENDLESS = { unlockAfter: 3, squad: 6, waveDur: 30, bossEvery: 5, saboEvery: 4 };
+const ENDLESS_POOL = [ // [foe, cost, first wave it can appear]
+  ['crawler', 1, 1], ['mimic', 2.2, 1], ['ghost', 1.6, 2], ['drone', 2, 4], ['shifter', 2.4, 4], ['plated', 4.5, 5],
+  ['spore', 3.5, 7], ['mite', 1.8, 7], ['leech', 2.5, 8], ['bomber', 1.8, 10], ['golem', 6, 11]
+];
+const ENDLESS_BOSSES = ['brute', 'sporemother', 'foreman', 'heart'];
+/** Wave n (1-based) of an endless run: a few foe groups whose total cost grows every wave. */
+function endlessWave(level, n, rnd) {
+  const air = level.routes.findIndex(r => r.air), ground = level.routes.map((r, i) => r.air ? -1 : i).filter(i => i >= 0);
+  const pool = ENDLESS_POOL.filter(p => p[2] <= n), spawns = [];
+  let budget = 7 + n * 3 + Math.pow(n, 1.4), delay = 0;
+  const groups = Math.min(4, 2 + Math.floor(n / 6));
+  for (let g = 0; g < groups && budget > 0; g++) {
+    const [type, cost] = pool[Math.floor(rnd() * pool.length)], share = g === groups - 1 ? budget : budget * (0.3 + rnd() * 0.3);
+    const cnt = Math.max(1, Math.min(16, Math.round(share / cost))), route = FOES[type].flying && air >= 0 ? air : ground[Math.floor(rnd() * ground.length)];
+    spawns.push({ type, n: cnt, gap: Math.max(0.6, 2.4 - n * 0.06), route, delay }); budget -= cnt * cost; delay += 3 + rnd() * 4;
+  }
+  if (n % ENDLESS.bossEvery === 0) spawns.push({ type: ENDLESS_BOSSES[(n / ENDLESS.bossEvery - 1) % ENDLESS_BOSSES.length], n: 1, gap: 1, route: ground[0], delay: 8 });
+  return { dur: ENDLESS.waveDur, spawns, mul: 1 + 0.07 * (n - 1) };
+}
 
 /* ---------- Difficulty ramp ----------
    Each mission's waves are authored at full strength, then the opening waves are eased

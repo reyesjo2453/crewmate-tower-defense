@@ -265,13 +265,25 @@ const Sound = (() => {
     door: () => { tone(90, .22, 'sawtooth', .16, 0, 50); tone(1400, .05, 'square', .05, .16); tone(70, .12, 'square', .12, .18, 40); },
     alarm: () => { [0, .32, .64].forEach(d => { tone(880, .16, 'square', .07, d); tone(660, .16, 'square', .07, d + .16); }); },
     fix: () => tone(740, .07, 'square', .07, 0, 980),
-    fixed: () => { [659, 880, 1175].forEach((f, i) => tone(f, .14, 'triangle', .14, i * .07)); }
+    fixed: () => { [659, 880, 1175].forEach((f, i) => tone(f, .14, 'triangle', .14, i * .07)); },
+    build: () => { tone(300, .06, 'square', .07); tone(420, .06, 'square', .07, .09); tone(520, .1, 'triangle', .09, .18); },
+    shield: () => { tone(880, .18, 'sine', .08, 0, 1320); tone(1320, .14, 'sine', .05, .06, 1760); },
+    bubble: () => tone(1500, .08, 'sine', .09, 0, 500),
+    boom: () => { tone(80, .45, 'sawtooth', .2, 0, 30); tone(160, .2, 'square', .1, 0, 50); },
+    drill: () => { tone(110, .6, 'sawtooth', .1, 0, 180); tone(55, .6, 'square', .08, .05, 90); },
+    medal: () => { [784, 988, 1175, 1568].forEach((f, i) => tone(f, .18, 'triangle', .13, i * .08)); },
+    bossIntro: () => { tone(98, 1.1, 'sawtooth', .16, 0, 49); tone(147, 1.1, 'square', .07, .1, 73); tone(1568, .4, 'sine', .05, .5, 784); }
   };
-  const THROTTLE = { fix: 0.05, shoot: 0.06, hit: 0.05, slash: 0.07, zap: 0.08, ping: 0.08, heal: 0.1, pop: 0.04 };
+  const THROTTLE = { bubble: 0.08, boom: 0.1, build: 0.2, fix: 0.05, shoot: 0.06, hit: 0.05, slash: 0.07, zap: 0.08, ping: 0.08, heal: 0.1, pop: 0.04 };
   const lastAt = {};
 
   return {
     ensure,
+    /** a short 'talking' blip for story dialogue; pitch per speaker */
+    voice(pitch) {
+      if (!sfxOn || !ensure()) return; const now = ctx.currentTime; if (now - (lastAt.voice || 0) < 0.055) return; lastAt.voice = now;
+      try { tone(pitch * (0.9 + Math.random() * 0.25), .045, 'square', .03); } catch (e) { }
+    },
     play(n) {
       if (n === 'win' || n === 'lose') { if (ensure()) SFX[n](); return; }
       if (!sfxOn || !ensure() || !SFX[n]) return;

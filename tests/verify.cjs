@@ -45,7 +45,8 @@ const base = (process.env.BASE_URL || 'http://localhost:8000/').replace(/\/?$/, 
     return out;
   });
   assert.deepEqual(problems, [], problems.join('\n'));
-  console.log('data ok: 10 levels validated');
+  const nLevels = await page.evaluate(() => LEVELS.length); assert.equal(nLevels, 14, '14 missions');
+  console.log('data ok: ' + nLevels + ' levels validated');
 
   // ---- fresh player journey with real clicks
   const fresh = await ctx.newPage(); fresh.on('pageerror', e => errors.push(e.message));
@@ -136,6 +137,99 @@ const base = (process.env.BASE_URL || 'http://localhost:8000/').replace(/\/?$/, 
   assert.equal(inGame.cards, 4, 'only the squad gets cards'); assert.deepEqual(inGame.look, { hat: 'party', pet: 'minibean' }, 'looks saved');
   await sq.evaluate(() => { const g = __t.G; g.dp = 99; g.deploy('rook', 3, 2); g.callNextWave(); g.slamDoor(g.doors[0]); for (const k of Object.keys(SABOTAGE)) { g.startSabotage(k); for (let i = 0; i < 90; i++) g.update(1 / 60); g.render(); g.endSabotage(true); } });
   console.log('squad & wardrobe ok');
+
+
+  // ---- chapter 4 crew & foes
+  const c4 = await page.evaluate(() => {
+    const mk = (id, opts) => { const g = new Game(null, { emit() { } }); g.start(LEVELS.find(l => l.id === id), 'captain', opts || {}); g.callNextWave(); g.queue.length = 0; g.foes = []; g.dp = 99; return g; };
+    const run = (g, s) => { for (let i = 0; i < 60 * s; i++) g.update(1 / 60); };
+    const r = {};
+    // Wrench builds a barricade on the floor next to him, and it blocks
+    let g = mk(11); const w = g.deploy('wrench', 2, 2); run(g, 3); r.built = !!w.wall && g.tileKind(w.wall.x, w.wall.y) === 'path';
+    const f = g.spawnFoe('crawler', 0, 0); run(g, 6); r.wallBlocks = f.blockedBy === w.wall || f.dead;
+    g.useSkill(Object.assign(w, { sp: w.spMax })); r.steel = g.stat(w.wall).block === 3;
+    g.retreat(w); r.wallGone = !g.crew.some(c => c.barricade);
+    // Marshal pierces half the armor and picks the toughest target
+    g = mk(12); const p1 = g.spawnFoe('plated', 0, 4), hp0 = p1.hp; g.hitFoe(p1, 150, false, true); r.pierce = Math.round(hp0 - p1.hp) === Math.round(150 - 55 / 2);
+    g.foes = []; const m = g.deploy('marshal', 4, 3), weak = g.spawnFoe('crawler', 0, 7), big = g.spawnFoe('golem', 0, 5); m.atkT = 0; g.updateCrew(m, 1 / 60); r.toughest = g.shots.length && g.shots[0].f === big;
+    // Bubbles shields a guard; the shield eats a whole hit
+    g = mk(13); const br = g.deploy('brick', 2, 3), bu = g.deploy('bubbles', 3, 2); bu.atkT = 0; g.updateCrew(bu, 1 / 60); r.shielded = br.shield === 1;
+    const hpB = br.hp; g.hitCrew(br, 500); r.soaked = br.hp === hpB && br.shield === 0;
+    // Blast Beetle explodes on a guard
+    g.foes = []; const bomb = g.spawnFoe('bomber', 0, 10); br.shield = 0; const hpC = br.hp; run(g, 5); r.boom = bomb.dead && br.hp < hpC;
+    // Rock Mite: untargetable and unblockable while burrowed
+    g = mk(11); const mite = g.spawnFoe('mite', 0, 1); mite.burT = 0; g.updateFoe(mite, 1 / 60); r.burrowed = mite.under && !g.visible(mite);
+    // Leech drains DP; Golem can't be slowed
+    g = mk(12); g.dp = 20; g.spawnFoe('leech', 2, 0); g.spawnFoe('leech', 2, 0); g.dpRate = 0; run(g, 2); r.drain = g.dp < 19;
+    const gol = g.spawnFoe('golem', 0, 1); gol.slowMul = 0.2; gol.slowT = 3; g.updateFoe(gol, 1 / 60); r.steady = gol.slowMul === 1;
+    // The Foreman drills underground
+    g = mk(14); const fm = g.spawnFoe('foreman', 0, 1); fm.drillT = 0; g.updateFoe(fm, 1 / 60); r.drill = fm.under;
+    return r;
+  });
+  assert.deepEqual(c4, { built: true, wallBlocks: true, steel: true, wallGone: true, pierce: true, toughest: true, shielded: true, soaked: true, boom: true, burrowed: true, drain: true, steady: true, drill: true });
+  console.log('chapter 4 crew & foes ok');
+
+  // ---- challenges, training, story mode, endless, slow-mo finish
+  const meta = await page.evaluate(() => {
+    const L = id => LEVELS.find(l => l.id === id), r = {};
+    const base = new Game(null, { emit() { } }); base.start(L(6), 'captain', {});
+    const g = new Game(null, { emit() { } }); g.start(L(6), 'captain', { mods: ['fast', 'tough', 'poor', 'glass', 'nomed', 'nodoors'] });
+    r.mods = g.spdMul === 1.2 && g.hpMul === 1.3 && g.dpRate < base.dpRate && g.maxLives < base.maxLives && !g.avail.includes('lumi') && g.doors.length === 0;
+    const u = new Game(null, { emit() { } }); u.start(L(6), 'captain', { ups: { rook: { tough: 2, power: 3, focus: 1 } } }); u.dp = 99; const rk = u.deploy('rook', 1, 2);
+    r.ups = u.stat(rk).maxHp === Math.round(CREW.rook.hp * 1.2) && Math.abs(u.stat(rk).atk - CREW.rook.atk * 1.24) < 1e-6 && rk.spMax === CREW.rook.skill.sp * 0.9;
+    r.xp = xpLevel(0) === 0 && xpLevel(90) === 2 && xpLevel(99999) === XP_MAX_LEVEL;
+    const s = new Game(null, { emit() { } }); s.start(L(1), 'story', {}); s.callNextWave(); for (let i = 0; i < 20; i++) s.leak(s.spawnFoe('crawler', 0, 0)); r.safe = s.lives === 1 && s.state !== 'lost';
+    for (let i = 0; i < 60; i++) s.update(1 / 60); r.safe = r.safe && s.state !== 'lost';
+    const e = new Game(null, { emit() { } }), lvl = Object.assign({}, L(3), { endless: true, crew: CREW_ORDER.slice(), waves: [] }); e.start(lvl, 'captain', {});
+    for (let i = 0; i < 12; i++) e.callNextWave(); r.endless = e.level.waves.length >= 14 && e.level.waves[11].mul > 1.7 && e.level.waves[9].spawns.some(sp => FOES[sp.type].boss);
+    r.endlessGround = e.level.waves.every(w => w.spawns.every(sp => !e.level.routes[sp.route].air || FOES[sp.type].flying));
+    let ended = null; const w = new Game(null, { emit(n, d) { if (n === 'end') ended = d; } }); w.start(L(1), 'captain', {}); w.callNextWave(); w.waveIdx = w.level.waves.length - 1; w.queue = []; w.foes = [];
+    w.update(1 / 60); r.slowmo = w.timeScale < 1 && w.state === 'playing'; for (let i = 0; i < 60; i++) w.update(1 / 60); r.won = w.state === 'won' && ended && ended.won && w.timeScale === 1;
+    const sug = new Game(null, { emit() { } }); sug.start(L(2), 'captain', {}); const h = sug.suggest(); r.hint = !!h && h.type === 'brick' && sug.canPlace('brick', h.x, h.y).ok;
+    return r;
+  });
+  assert.deepEqual(meta, { mods: true, ups: true, xp: true, safe: true, endless: true, endlessGround: true, slowmo: true, won: true, hint: true });
+  console.log('challenges, training, story mode, endless & hint mechanics ok');
+
+  // ---- the new screens with real clicks
+  const ui = await ctx.newPage(); ui.on('pageerror', e => errors.push(e.message));
+  await ui.goto(base + '?test'); await ui.waitForFunction(() => window.__t);
+  await ui.evaluate(() => { const s = __t.save(); s.intro = true; s.tutDone = true; for (let i = 1; i <= 3; i++) s.stars[i] = 3; __t.persist(); __t.toHub(); });
+  assert.ok(await ui.isVisible('#hubEnd'), 'endless unlocked after chapter 1');
+  // replay a cleared mission with a challenge on, then win it
+  await ui.evaluate(() => __t.playLevel(2)); await ui.waitForSelector('#s-squad:not(.hidden)');
+  assert.ok(await ui.isVisible('#sqModsWrap'), 'challenges offered on a cleared mission'); assert.ok(!(await ui.isVisible('#sqCrewWrap')), 'no squad pick when everyone fits');
+  await ui.click('.mod[data-mod=fast]'); await ui.click('.mod[data-mod=glass]'); await ui.click('#sqGo'); await ui.waitForSelector('#s-game:not(.hidden)');
+  assert.deepEqual(await ui.evaluate(() => [__t.G.spdMul, __t.G.maxLives]), [1.2, 4], 'challenges applied');
+  await ui.click('#btnHint'); assert.ok(await ui.evaluate(() => !!__t.G.hint && __t.G.placing === 'brick'), 'hint picks a crewmate and a tile');
+  await ui.evaluate(() => { const g = __t.G; g.dp = 99; g.placing = null; [[2, 2], [3, 3], [5, 2], [5, 4], [7, 2], [7, 4], [8, 2], [8, 4], [2, 4]].forEach(([x, y]) => g.deploy('rook', x, y)); g.deploy('tank', 4, 3); g.deploy('brick', 4, 1); for (let i = 0; i < 60 * 300 && g.state !== 'won' && g.state !== 'lost'; i++) { if (g.state === 'prep' || (!g.foes.length && !g.queue.length)) g.callNextWave(); g.update(1 / 60); } });
+  await ui.waitForSelector('#modalCard .bigstars', { timeout: 8000 });
+  const won = await ui.evaluate(() => ({ mods: __t.save().mods[2], txt: document.getElementById('modalCard').textContent, xp: __t.save().xp.rook }));
+  assert.deepEqual(won.mods.sort(), ['fast', 'glass'], 'bolts saved'); assert.ok(/challenge bolts/.test(won.txt) && /XP/.test(won.txt), 'result shows bolts and XP'); assert.ok(won.xp >= 30, 'squad earned XP');
+  // spend an upgrade point in the Crew screen
+  await ui.click('#rGo'); for (let i = 0; i < 20 && await ui.isVisible('#s-dialog'); i++) { await ui.click('#dlgSkip'); await ui.waitForTimeout(50); }
+  await ui.waitForSelector('#s-hub:not(.hidden)'); await ui.click('#hubWard'); await ui.waitForSelector('#s-ward:not(.hidden)');
+  await ui.click('#wCrew button[data-k=rook]'); await ui.click('[data-up=power]');
+  assert.equal(await ui.evaluate(() => __t.save().ups.rook.power), 1, 'upgrade point spent');
+  await ui.click('[data-wtab=style]'); assert.ok(await ui.locator('.item[data-id=chrome].lock').count(), 'Chrome visor still needs 3 bolts (we have 2)');
+  await ui.click('#wBack');
+  // endless: pick a map, play until the ship falls, best is saved
+  await ui.click('#hubEnd'); await ui.waitForSelector('#s-endless:not(.hidden)'); await ui.click('#endList .lvl >> nth=1');
+  await ui.waitForSelector('#s-squad:not(.hidden)'); await ui.click('#sqGo'); await ui.waitForSelector('#s-game:not(.hidden)');
+  assert.ok(await ui.evaluate(() => __t.G.endless && document.getElementById('waveTxt').textContent.includes('♾')), 'endless HUD');
+  await ui.evaluate(() => { const g = __t.G; g.callNextWave(); for (let i = 0; i < 4; i++) g.callNextWave(); for (let i = 0; i < 60 * 400 && g.state !== 'lost'; i++) g.update(1 / 60); });
+  await ui.waitForSelector('#modalCard .bigscore', { timeout: 8000 });
+  assert.ok(await ui.evaluate(() => __t.save().endless[2] >= 4), 'endless best saved');
+  // boss intro card, medals tab, accessibility switches
+  await ui.click('#rRe'); await ui.evaluate(() => { const s = __t.save(); delete s.coach.boss_brute; __t.G.callNextWave(); __t.G.spawnFoe('brute', 0, 0); });
+  assert.ok(await ui.isVisible('#bossIntro') && await ui.evaluate(() => __t.G.frozen), 'boss intro freezes the action'); await ui.click('#bossIntro');
+  assert.ok(!(await ui.evaluate(() => __t.G.frozen)), 'tap dismisses the boss intro');
+  await ui.evaluate(() => { __t.G.stop(); __t.checkMedals(true); __t.toLog('hub'); }); await ui.click('[data-tab=medals]');
+  assert.ok(await ui.locator('.medal.on').count() >= 2, 'medals earned and shown');
+  await ui.evaluate(() => __t.toSettings()); await ui.click('#optCb'); await ui.click('#optBig');
+  assert.ok(await ui.evaluate(() => A11Y.cb && document.body.classList.contains('big-ui') && __t.save().a11y.cb), 'accessibility options apply');
+  assert.ok(await ui.locator('#segDiff .btn', { hasText: 'Story' }).count(), 'story difficulty offered');
+  console.log('challenges, crew training, endless, boss intro, medals & settings screens ok');
 
   // ---- offline PWA
   const pwa = await browser.newContext({ viewport: { width: 900, height: 430 } }); const pp = await pwa.newPage();
