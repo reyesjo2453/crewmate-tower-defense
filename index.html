@@ -47,9 +47,49 @@
     <header class="bar">
       <button class="btn small" id="hubBack">&larr; Title</button>
       <h2>Mission Map</h2>
-      <div class="bar-right"><span class="pill" id="hubStars">&#9733; 0</span><button class="btn small" id="hubLog">Logbook</button></div>
+      <div class="bar-right"><span class="pill" id="hubStars">&#9733; 0</span><button class="btn small hidden" id="hubEnd">Endless</button><button class="btn small" id="hubWard">Crew</button><button class="btn small" id="hubLog">Logbook</button></div>
     </header>
     <div class="hub-scroll" id="hubList"></div>
+  </section>
+
+  <!-- SQUAD SELECT -->
+  <section id="s-squad" class="screen hidden">
+    <header class="bar">
+      <button class="btn small" id="sqBack">&larr; Map</button>
+      <h2 id="sqTitle">Choose your squad</h2>
+      <button class="btn small" id="sqWard">Wardrobe</button>
+    </header>
+    <div class="sq-scroll">
+      <p class="sq-intro" id="sqIntro"></p>
+      <div id="sqCrewWrap"><div class="sq-crew" id="sqCrew"></div></div>
+      <div id="sqModsWrap" class="hidden"><h3>Challenges <small id="sqModsSum"></small></h3><p class="tiny">Optional handicaps. Win with one on to earn a ⚡ bolt — bolts unlock special styles.</p><div class="sq-mods" id="sqMods"></div></div>
+      <h3>Mission intel</h3>
+      <div class="sq-intel" id="sqIntel"></div>
+    </div>
+    <div class="sq-foot"><span id="sqCount"></span><button class="btn primary" id="sqGo">DEPLOY &#9654;</button></div>
+  </section>
+
+  <!-- ENDLESS -->
+  <section id="s-endless" class="screen hidden">
+    <header class="bar">
+      <button class="btn small" id="endBack">&larr; Map</button>
+      <h2>Endless</h2>
+      <span class="pill" id="endBest">&#9854; 0</span>
+    </header>
+    <div class="hub-scroll"><p class="sq-intro">Pick a map you’ve cleared. Foes are remixed and get tougher every wave — survive as long as you can!</p><div id="endList"></div></div>
+  </section>
+
+  <!-- CREW: training + wardrobe -->
+  <section id="s-ward" class="screen hidden">
+    <header class="bar">
+      <button class="btn small" id="wBack">&larr; Back</button>
+      <div class="tabs"><button class="btn small tab on" data-wtab="train">Training</button><button class="btn small tab" data-wtab="style">Style</button></div>
+      <span class="pill" id="wStars">&#9733; 0</span>
+    </header>
+    <div class="ward">
+      <div class="w-left"><canvas id="wPreview" aria-label="Preview"></canvas><div class="w-crew" id="wCrew"></div></div>
+      <div class="w-right" id="wItems"></div>
+    </div>
   </section>
 
   <!-- GAME -->
@@ -60,6 +100,7 @@
       <div class="wavebox"><span id="waveTxt">Wave 0/0</span><small id="waveSub"></small></div>
       <button class="btn small next" id="btnNext">&#9654; START</button>
       <button class="icon-btn speed" id="btnSpeed" aria-label="Game speed">1&times;</button>
+      <button class="icon-btn" id="btnHint" aria-label="Hint">&#128161;</button>
       <div class="dp" id="dpBox" data-focus="dp"><div class="dp-fill" id="dpFill"></div><span class="dp-label">DP</span><b id="dpVal">0</b></div>
     </div>
     <div class="g-main">
@@ -69,6 +110,7 @@
         <div class="banner hidden" id="banner"></div>
         <div class="radio hidden" id="radio"><canvas id="radioPic" width="64" height="64"></canvas><div><b id="radioName"></b><p id="radioTxt"></p></div></div>
         <div class="tip hidden" id="tip"></div>
+        <div class="boss-intro hidden" id="bossIntro" role="dialog" aria-label="Boss"><canvas id="biPic"></canvas><div><small>⚠ BOSS INCOMING</small><b id="biName"></b><p id="biLore"></p><p class="bi-tip" id="biTip"></p></div></div>
         <div class="tut hidden" id="tut">
           <canvas id="tutPic" width="64" height="64"></canvas>
           <div class="tut-body"><b>Captain Juno</b><p id="tutTxt"></p><div class="tut-btns"><button class="btn small primary" id="tutNext">Next</button><button class="btn small ghost" id="tutSkip">Skip tutorial</button></div></div>
@@ -94,7 +136,7 @@
     <header class="bar">
       <button class="btn small" id="logBack">&larr; Back</button>
       <h2>Logbook</h2>
-      <div class="tabs"><button class="btn small tab on" data-tab="crew">Crew</button><button class="btn small tab" data-tab="foes">Foes</button></div>
+      <div class="tabs"><button class="btn small tab on" data-tab="crew">Crew</button><button class="btn small tab" data-tab="foes">Foes</button><button class="btn small tab" data-tab="medals">Medals</button></div>
     </header>
     <div class="log-scroll" id="logList"></div>
   </section>
@@ -109,6 +151,11 @@
       <h3>Sound</h3>
       <label class="check"><input type="checkbox" id="optMusic"> Music</label>
       <label class="check"><input type="checkbox" id="optSfx"> Sound effects</label>
+      <h3>Accessibility</h3>
+      <label class="check"><input type="checkbox" id="optCb"> Colour-blind friendly highlights</label>
+      <label class="check"><input type="checkbox" id="optBig"> Bigger buttons</label>
+      <label class="check"><input type="checkbox" id="optVib"> Vibration on big moments</label>
+      <p class="tiny">Tip: the speed button also has a ½× slow mode, and 💡 gives a hint in battle.</p>
       <h3>Tutorial</h3>
       <button class="btn" id="btnTutAgain">Replay the tutorial in Mission 1</button>
       <h3>Progress</h3>
@@ -119,6 +166,7 @@
 
   <!-- MODAL (pause / result / confirm) -->
   <div id="modal" class="modal hidden"><div class="modal-card" id="modalCard"></div></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
   <div id="rotate" class="rotate hidden">&#8635; Turn your device sideways for a bigger battlefield</div>
 </div>
 
