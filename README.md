@@ -70,8 +70,14 @@ The Logbook's **Medals** tab tracks 23 goals, such as winning without losing a h
 
 ### Feel and accessibility
 
-- **Bigger moments:** the screen shakes on heavy boss hits, the last foe falls in slow motion, story characters talk in little voice blips, and phones vibrate on big moments.
-- **Options in Settings:** colour-blind friendly highlights (orange stripes for floor tiles, blue dots for decks, blue/orange health bars), bigger buttons, and a vibration on/off switch.
+- **Hits that land:** a split-second hit-pause on big blows, knockback, crewmates that drop in and squash on landing, lunge when they attack and bounce when promoted, and foes that squash, flash, then burst into tumbling debris.
+- **Particles:** sparks off every bullet and blade, muzzle flashes, dust when crew land or doors slam, healing twinkles, and fireball blasts.
+- **Damage numbers** pop over foes (hits in quick succession merge into one number; yellow for electric, orange for armour-piercing).
+- **Camera:** smooth screen shake, a zoom punch when a boss goes down, a slow-motion zoom on the last foe and a burst of confetti on victory, and a red edge flash when the reactor takes a hit.
+- **Voices:** crewmates babble in their own pitch on the radio and shout a battle cry when their skill fires; story characters talk in little voice blips; phones vibrate on big moments.
+- **Options in Settings:** colour-blind friendly highlights (orange stripes for floor tiles, blue dots for decks, blue/orange health bars), bigger buttons, a vibration switch, **Calmer screen** (no hit-pause or zoom, gentle flashes, no shaking) and a damage-numbers switch.
+
+All of this is cosmetic (`js/juice.js`): it never touches the battle's random numbers, and only exists when there is a screen, so automated runs and battle outcomes are exactly the same with or without it.
 - **In battle:** a **½×** speed and a **💡 Hint** button that suggests who to place and where (or who to promote).
 
 Mission 1 is a hand-held **tutorial** with Captain Juno (replayable in Settings). After that, the first time each new crewmate joins, they say on the radio where they like to stand, their card glows, and a good tile glows on the map until you place them.
@@ -86,8 +92,9 @@ An original, adaptive score synthesized live in `js/audio.js` (no audio files): 
 - **Heartbeat:** fades in and speeds up as foes get close to the reactor or the ship's health runs low.
 - **Bosses** switch to a faster, darker groove with brass stabs and risers.
 - **Victory and defeat** each get a short sting.
+- **Sound effects** are layered (a noise transient, a pitched body and often a low thump), panned left or right by where they happen on the board, given a little room echo, and nudged in pitch each time so rapid fire doesn't sound robotic. The music dips under big moments (boss knockouts, explosions, skills), small sounds drop out first when the fight gets busy, and the music goes muffled while paused. A drum roll leads into every wave.
 
-`Sound.preview(mood, intensity, danger, seconds)` renders any mood offline, which is handy for tuning the mix.
+`Sound.preview(mood, intensity, danger, seconds)` renders any mood offline, and `Sound.previewSfx(name)` renders one sound effect, which is handy for tuning the mix.
 
 ## Controls
 
@@ -113,10 +120,11 @@ Progress (stars, bolts, XP and upgrades, medals, Endless bests, unlocks, setting
 - `js/data.js` — **all content**: crew, foes, themes, maps, waves, story, tutorial script, difficulty, doors & sabotage, squads, wardrobe items, challenges, training, medals, Endless wave generator
 - `js/art.js` — Canvas drawing for crewmates, foes and environments
 - `js/engine.js` — simulation + rendering (DOM-free, can run headless)
+- `js/juice.js` — cosmetic game feel: hit-pause, squash & stretch, particles, damage numbers, camera
 - `js/ui.js` — screens, dialogue, mission briefing (squad and challenges), Endless, crew training and wardrobe, medals, HUD, hints, tutorial, save data
 - `js/audio.js` — synthesized sound & music
 - `sw.js`, `manifest.json`, `icons/` — PWA
-- `tests/` — dev only: `verify.cjs` (data validation, a click-through of the first-play journey, mechanics for every crewmate and foe, challenges, Endless, training, medals, settings, save codes, new-crewmate coaching, offline), `sim.cjs` + `bot.js` (an automatic player used to tune difficulty)
+- `tests/` — dev only: `verify.cjs` (data validation, a click-through of the first-play journey, mechanics for every crewmate and foe, challenges, Endless, training, medals, settings, save codes, new-crewmate coaching, game feel & sound, offline), `sim.cjs` + `bot.js` (an automatic player used to tune difficulty)
 
 ## Testing
 

@@ -9,7 +9,7 @@
   /* ---------- Save ---------- */
   const SAVE_KEY = 'crewmate-command-v1';
   const defaults = () => ({ stars: {}, diff: 'captain', music: true, sfx: true, intro: false, tutDone: false, seen: {}, losses: {}, ended: false, looks: {}, squads: {}, coach: {}, lookSeen: 0,
-    mods: {}, xp: {}, ups: {}, st: {}, flags: {}, medals: {}, endless: {}, a11y: { cb: false, big: false, vib: true } });
+    mods: {}, xp: {}, ups: {}, st: {}, flags: {}, medals: {}, endless: {}, a11y: { cb: false, big: false, vib: true, calm: false, nums: true } });
   let mem = null;
   function loadSave() {
     try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && typeof s === 'object') return Object.assign(defaults(), s); } catch (e) { }
@@ -17,7 +17,7 @@
   }
   let save = loadSave();
   function applyPrefs() {
-    STYLE.looks = save.looks; A11Y.cb = !!save.a11y.cb;
+    STYLE.looks = save.looks; A11Y.cb = !!save.a11y.cb; JUICE.calm = !!save.a11y.calm; JUICE.nums = save.a11y.nums !== false;
     document.body.classList.toggle('big-ui', !!save.a11y.big);
   }
   applyPrefs();
@@ -54,7 +54,7 @@
   let current = 'title';
   function show(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.toggle('hidden', s.id !== 's-' + id));
-    current = id; if (id !== 'game') { if (G) G.stop(); $('rotate').classList.add('hidden'); }
+    current = id; if (id !== 'game') { if (G) G.stop(); $('rotate').classList.add('hidden'); Sound.muffle(false); }
     if (id !== 'ward') Wardrobe.stop();
     if (id === 'title' || id === 'hub' || id === 'log' || id === 'set' || id === 'squad' || id === 'ward' || id === 'endless') Sound.mood('title');
     else if (id === 'dialog' || id === 'intro') Sound.mood('story');
@@ -222,11 +222,13 @@
     });
     $('diffDesc').textContent = DIFFICULTY[save.diff].desc;
     $('optMusic').checked = save.music; $('optSfx').checked = save.sfx;
-    $('optCb').checked = !!save.a11y.cb; $('optBig').checked = !!save.a11y.big; $('optVib').checked = save.a11y.vib !== false;
+    $('optCb').checked = !!save.a11y.cb; $('optBig').checked = !!save.a11y.big; $('optVib').checked = save.a11y.vib !== false; $('optCalm').checked = !!save.a11y.calm; $('optNums').checked = save.a11y.nums !== false;
   }
   $('optCb').onchange = e => { save.a11y.cb = e.target.checked; applyPrefs(); persist(); };
   $('optBig').onchange = e => { save.a11y.big = e.target.checked; applyPrefs(); persist(); };
   $('optVib').onchange = e => { save.a11y.vib = e.target.checked; persist(); buzz(60); };
+  $('optCalm').onchange = e => { save.a11y.calm = e.target.checked; applyPrefs(); persist(); };
+  $('optNums').onchange = e => { save.a11y.nums = e.target.checked; applyPrefs(); persist(); };
   $('optMusic').onchange = e => { save.music = e.target.checked; Sound.setMusic(save.music); persist(); };
   $('optSfx').onchange = e => { save.sfx = e.target.checked; Sound.setSfx(save.sfx); persist(); Sound.play('click'); };
   $('btnTutAgain').onclick = () => { save.tutDone = false; persist(); $('btnTutAgain').textContent = 'Tutorial will play in Mission 1 ✓'; };
@@ -565,15 +567,15 @@
   }
   let radioT = 0, radioPend = 0;
   function radio(who, text, ms) {
-    const c = CAST[who] || CAST.juno; paintPortrait($('radioPic'), CAST[who] ? who : c); $('radioName').textContent = c.name; $('radioTxt').textContent = text;
+    const c = CAST[who] || CAST.juno; paintPortrait($('radioPic'), CAST[who] ? who : c); $('radioName').textContent = c.name; $('radioTxt').textContent = text; Sound.chatter(VOICE[who] || 300, Math.min(9, 3 + Math.round(text.length / 18)));
     $('radio').classList.remove('hidden'); clearTimeout(radioT); radioT = setTimeout(() => $('radio').classList.add('hidden'), ms || 6500);
   }
 
   /* ----- game events ----- */
   G = new Game(cv, {
-    emit(name, d) {
+    emit(name, d, e) {
       switch (name) {
-        case 'sfx': Sound.play(d); break;
+        case 'sfx': Sound.play(d, e); break;
         case 'deny': if (current === 'game') { tip(d); Sound.play('deny'); } break;
         case 'wave':
           showBanner(d.last ? 'FINAL WAVE' : 'WAVE ' + d.n + ' / ' + d.total, d.last ? 'Hold the line!' : '', d.last); 
@@ -599,7 +601,7 @@
         case 'deploy': tut && tut.on('deploy:' + d.type);
           if (showMe) { if (d.type === showMe.type) doneShowMe(true); else pointShowMe(); }
           else if (!tut && G.hint) G.hint = null; break;
-        case 'skill': bump('skills'); tut && tut.on('skill'); break;
+        case 'skill': Sound.bark(VOICE[d.type] || 300, d.type === 'tank' || d.type === 'brick'); bump('skills'); tut && tut.on('skill'); break;
         case 'promote': bump('promotes'); break;
         case 'leak': if (d) { pop(); buzz(50); } break;
         case 'end': onEnd(d); break;
@@ -657,7 +659,7 @@
     const sub = G.state === 'prep' ? 'Get ready' : (G.foes.length + G.queue.length) + ' foes';
     if (L.sub !== sub) { $('waveSub').textContent = sub; L.sub = sub; }
   }
-  function frame() { if (current !== 'game') return; hud(); updatePanel(); if (tut) tut.tick(); music(); }
+  function frame() { if (current !== 'game') return; Sound.muffle(G.paused); hud(); updatePanel(); if (tut) tut.tick(); music(); }
   // adaptive soundtrack: layers follow how hot the fight is
   function music() {
     if (G.state === 'won' || G.state === 'lost' || G.state === 'stopped') return;

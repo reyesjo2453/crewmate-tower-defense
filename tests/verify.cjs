@@ -257,6 +257,33 @@ const base = (process.env.BASE_URL || 'http://localhost:8000/').replace(/\/?$/, 
   await ui.evaluate(() => __t.G.stop());
   console.log('new crewmate coaching ok');
 
+  // ---- game feel & sound: cosmetic only, never in headless runs, every effect makes a sound
+  const feel = await ui.evaluate(async () => {
+    const out = {}, g = __t.G; out.headless = new Game(null, {}).J === null; out.live = !!g.J;
+    __t.setLevel(LEVELS[2]); __t.beginGame(); g.callNextWave(); g.queue = []; g.foes = [];
+    const f = g.spawnFoe('crawler', 0, 3); g.hitFoe(f, 10); out.pending = Math.round(f.jAcc);
+    g.hitFoe(f, 1e6); out.num = g.J.nums.length ? g.J.nums[g.J.nums.length - 1].v : null; out.maxHp = Math.round(f.maxHp);
+    out.debris = g.J.p.some(e => e.k === 'chunk'); out.dying = g.J.p.some(e => e.k === 'die');
+    const b = g.spawnFoe('brute', 0, 3); g.hitFoe(b, 1e6); out.bossFreeze = g.J.hs > 0.1 && g.J.zt > 1.1;
+    g.J.reset(); JUICE.calm = true; const b2 = g.spawnFoe('brute', 0, 3); g.hitFoe(b2, 1e6); out.calm = g.J.hs === 0 && g.J.zHold <= 0; JUICE.calm = false;
+    JUICE.nums = false; const f2 = g.spawnFoe('crawler', 0, 3); g.hitFoe(f2, 10); out.numsOff = !f2.jAcc; JUICE.nums = true;
+    out.tile = JSON.stringify(g.tileAt(g.cv.getBoundingClientRect().left + 5, g.cv.getBoundingClientRect().top + 5)) === '[0,0]';
+    g.stop();
+    const silent = []; for (const n of Sound.sfxNames().concat('chatter')) { if (n === 'win' || n === 'lose') continue; const pk = await Sound.previewSfx(n, -0.5); if (!(pk > 0.003)) silent.push(n + ':' + pk); }
+    out.silent = silent; return out;
+  });
+  assert.ok(feel.headless && feel.live, 'juice only with a canvas');
+  assert.equal(feel.pending, 10, 'hits gather into one damage number');
+  assert.equal(feel.num, feel.maxHp, 'the number shows real damage, not overkill');
+  assert.ok(feel.debris && feel.dying, 'defeated foes squash and burst');
+  assert.ok(feel.bossFreeze, 'boss knockouts hit-pause and zoom');
+  assert.ok(feel.calm, 'calmer screen turns off hit-pause and zoom');
+  assert.ok(feel.numsOff, 'damage numbers can be turned off');
+  assert.ok(feel.tile, 'tapping still maps to the right tile');
+  assert.deepEqual(feel.silent, [], 'every sound effect renders and is audible');
+  assert.ok(await ui.evaluate(() => !!document.getElementById('optCalm') && !!document.getElementById('optNums')), 'settings switches exist');
+  console.log('game feel & sound ok');
+
   // ---- offline PWA
   const pwa = await browser.newContext({ viewport: { width: 900, height: 430 } }); const pp = await pwa.newPage();
   await pp.goto(base); await pp.evaluate(() => navigator.serviceWorker.ready); await pp.waitForTimeout(800); await pp.reload(); await pp.waitForTimeout(500);
