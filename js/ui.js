@@ -117,7 +117,7 @@
     const pic = $('dlgPic'); pic.style.width = pic.style.height = ''; paintPortrait(pic, c, true);
     d.full = text; d.typing = true; const tx = $('dlgText'); tx.textContent = ''; let n = 0;
     const pitch = VOICE[who] || 300;
-    d.timer = setInterval(() => { n += 2; tx.textContent = text.slice(0, n); if (n % 4 === 0 && /\w/.test(text[n - 1] || '')) Sound.voice(pitch); if (n >= text.length) { clearInterval(d.timer); d.typing = false; tx.textContent = text; } }, 22);
+    d.timer = setInterval(() => { n += 2; tx.textContent = text.slice(0, n); if (n % 4 === 0 && /\w/.test(text[n - 1] || '')) Sound.voice(pitch, (text.slice(n - 4, n).match(/[aeiouy]/i) || [])[0]); if (n >= text.length) { clearInterval(d.timer); d.typing = false; tx.textContent = text; } }, 22);
   }
   $('s-dialog').addEventListener('click', e => {
     if (e.target.id === 'dlgSkip') return; const d = dlg; if (!d) return; Sound.ensure();

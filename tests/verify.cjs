@@ -323,6 +323,20 @@ const base = (process.env.BASE_URL || 'http://localhost:8000/').replace(/\/?$/, 
   await ui.evaluate(() => __t.toHub()); assert.ok(/Chapter 5/.test(await ui.textContent('#hubList')), 'chapter 5 on the map');
   console.log('combos, helping foes, the Conductor, lighting & chapter 5 ok');
 
+  // ---- sound quality: clean mix, gentle voices, self-healing engine
+  const snd = await ui.evaluate(async () => {
+    const an = b => { let pk = 0, bad = 0, e = 0, hf = 0; for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); let pv = 0; for (let i = 0; i < d.length; i++) { const v = d[i]; if (!isFinite(v)) { bad++; continue; } pk = Math.max(pk, Math.abs(v)); e += v * v; hf += (v - pv) * (v - pv); pv = v; } } return { pk, bad, bright: hf / (e || 1) }; };
+    const out = { music: {}, voice: {} };
+    for (const m of ['title', 'story', 'battle', 'boss']) out.music[m] = an(await Sound.preview(m, 3, 0.9, 8));
+    for (const v of [80, 330, 660]) out.voice[v] = an(await Sound.previewBuffer('voice:' + v, 2));
+    Sound.ensure(); Sound._breakForTest(); await new Promise(r => setTimeout(r, 200)); out.healed = Sound.health().heals >= 1 && Sound.health().state !== 'closed';
+    return out;
+  });
+  for (const [m, r] of Object.entries(snd.music)) { assert.equal(r.bad, 0, m + ' music has no bad samples'); assert.ok(r.pk > 0.02 && r.pk < 1, m + ' music is audible and never clips (' + r.pk + ')'); }
+  for (const [v, r] of Object.entries(snd.voice)) { assert.ok(r.pk > 0.005 && r.bad === 0, 'voice ' + v + ' Hz speaks'); assert.ok(r.bright < 0.01, 'voice ' + v + ' Hz is not shrill (' + r.bright.toFixed(4) + ')'); }
+  assert.ok(snd.healed, 'audio engine rebuilds itself if it breaks');
+  console.log('sound quality ok');
+
   // ---- offline PWA
   const pwa = await browser.newContext({ viewport: { width: 900, height: 430 } }); const pp = await pwa.newPage();
   await pp.goto(base); await pp.evaluate(() => navigator.serviceWorker.ready); await pp.waitForTimeout(800); await pp.reload(); await pp.waitForTimeout(500);
