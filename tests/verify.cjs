@@ -330,11 +330,18 @@ const base = (process.env.BASE_URL || 'http://localhost:8000/').replace(/\/?$/, 
     for (const m of ['title', 'story', 'battle', 'boss']) out.music[m] = an(await Sound.preview(m, 3, 0.9, 8));
     for (const v of [80, 330, 660]) out.voice[v] = an(await Sound.previewBuffer('voice:' + v, 2));
     Sound.ensure(); Sound._breakForTest(); await new Promise(r => setTimeout(r, 200)); out.healed = Sound.health().heals >= 1 && Sound.health().state !== 'closed';
+    // a graph that goes dead (flat output) while music plays is rebuilt on its own; talking uses the baked clips
+    Sound.setMusic(true); Sound.mood('story'); Sound.startMusic(); await new Promise(r => setTimeout(r, 2500));
+    out.clips = Sound.health().clips; for (let i = 0; i < 6; i++) { Sound.voice(400, 'a'); await new Promise(r => setTimeout(r, 90)); }
+    const h0 = Sound.health().heals; out.heard = Sound.health().heard; Sound._breakForTest('silence'); await new Promise(r => setTimeout(r, 5000));
+    out.silenceHealed = Sound.health().heals > h0 && Sound.health().lastHeal === 'the sound went silent';
     return out;
   });
   for (const [m, r] of Object.entries(snd.music)) { assert.equal(r.bad, 0, m + ' music has no bad samples'); assert.ok(r.pk > 0.02 && r.pk < 1, m + ' music is audible and never clips (' + r.pk + ')'); }
   for (const [v, r] of Object.entries(snd.voice)) { assert.ok(r.pk > 0.005 && r.bad === 0, 'voice ' + v + ' Hz speaks'); assert.ok(r.bright < 0.01, 'voice ' + v + ' Hz is not shrill (' + r.bright.toFixed(4) + ')'); }
   assert.ok(snd.healed, 'audio engine rebuilds itself if it breaks');
+  assert.ok(snd.heard && snd.clips, 'live engine is playing and voice clips are baked');
+  assert.ok(snd.silenceHealed, 'engine rebuilds itself when its output goes dead');
   console.log('sound quality ok');
 
   // ---- offline PWA

@@ -23,7 +23,7 @@
 const Sound = (() => {
   let ctx = null, N = null;
   let sfxOn = true, musicOn = true, timer = 0, hooked = false, previewing = false;
-  let lastCT = -1, stalls = 0, heals = 0, lastHeal = '';
+  let lastCT = -1, stalls = 0, heals = 0, lastHeal = '', quietFor = 0, heard = false, silentHeals = [], bank = null, unlocked = false;
   const MUSIC_LV = 0.4;
   const S = { mood: 'title', pendingMood: null, bpm: 76, step: 0, next: 0, intensity: 0, wantIntensity: 0, danger: 0, sting: 0 };
   const quiet = p => { if (p && p.catch) p.catch(() => { }); };
@@ -38,7 +38,7 @@ const Sound = (() => {
     if (previewing) return ctx;
     if (ctx && ctx.state === 'closed') { ctx = null; N = null; }
     if (!ctx) { const c = fresh(); if (!c) return null; build(c); S.next = ctx.currentTime + 0.1; hook(); }
-    wake(); return ctx;
+    wake(); unlock(); return ctx;
   }
   /** resume from 'suspended' (autoplay rules, our own pause) or iOS's 'interrupted' (calls, Siri, lock screen) */
   function wake() {
@@ -53,10 +53,17 @@ const Sound = (() => {
       else wake();
     });
     // browsers only let audio start inside a gesture: every tap/key is a chance to wake it
-    const nudge = () => { if (!ctx || previewing) return; if (ctx.state === 'closed') ensure(); else wake(); };
+    const nudge = () => { if (!ctx || previewing) return; if (ctx.state === 'closed') ensure(); else { wake(); unlock(); } };
     for (const ev of ['pointerdown', 'touchstart', 'touchend', 'mousedown', 'keydown']) window.addEventListener(ev, nudge, { capture: true, passive: true });
     window.addEventListener('pageshow', nudge); window.addEventListener('focus', nudge);
     setInterval(watchdog, 1000);
+  }
+  /** iPhone/iPad: playing a tiny silent buffer inside a tap 'unlocks' a context; 'playback' makes it a
+      media session, so it isn't cut by the ring/silent switch or dropped as easily by the system */
+  function unlock() {
+    try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) { }
+    if (unlocked || !ctx || ctx.state !== 'running') return;
+    try { const b = ctx.createBufferSource(); b.buffer = ctx.createBuffer(1, 1, ctx.sampleRate); b.connect(ctx.destination); b.start(0); unlocked = true; } catch (e) { }
   }
   const probeBuf = new Float32Array(2048);
   function watchdog() {
@@ -66,15 +73,24 @@ const Sound = (() => {
     if (ct === lastCT) { if (++stalls >= 3) { heal('the audio clock stopped'); return; } } else stalls = 0;
     lastCT = ct;
     try {
-      N.probe.getFloatTimeDomainData(probeBuf);
-      for (let i = 0; i < probeBuf.length; i += 4) { const v = probeBuf[i]; if (v !== v || v > 4 || v < -4) { heal('bad samples'); return; } }
+      N.probe.getFloatTimeDomainData(probeBuf); let mx = 0, mn = 0;
+      for (let i = 0; i < probeBuf.length; i += 2) { const v = probeBuf[i]; if (v !== v || v > 4 || v < -4) { heal('bad samples'); return; } if (v > mx) mx = v; if (v < mn) mn = v; }
+      // a dead graph (a filter that blew up somewhere upstream, a stuck output) goes flat. The music always
+      // has something sounding, so seconds of flat output while it plays means the sound has died: rebuild.
+      const flat = mx - mn < 1e-6;
+      if (!flat) { heard = true; quietFor = 0; }
+      else if (heard && musicOn && timer && ++quietFor >= 3) {
+        const now = Date.now(); silentHeals = silentHeals.filter(x => now - x < 60000);
+        if (silentHeals.length < 3) { silentHeals.push(now); heal('the sound went silent'); }
+        quietFor = 0;
+      }
     } catch (e) { }
   }
   /** throw the whole graph away and start clean; the music picks up where it was */
   function heal(why) {
-    heals++; lastHeal = why; const old = ctx; ctx = null; N = null; stalls = 0; lastCT = -1;
+    heals++; lastHeal = why; const old = ctx; ctx = null; N = null; stalls = 0; lastCT = -1; quietFor = 0; heard = false; unlocked = false; bank = null;
     try { quiet(old.close()); } catch (e) { }
-    const c = fresh(); if (!c) return; build(c); S.next = ctx.currentTime + 0.1; S.sting = 0; wake();
+    const c = fresh(); if (!c) return; build(c); S.next = ctx.currentTime + 0.1; S.sting = 0; wake(); unlock();
   }
 
   /* ---------- graph ---------- */
@@ -138,6 +154,7 @@ const Sound = (() => {
     n.pink = ctx.createBuffer(1, sr * 2, sr);
     { const d = n.pink.getChannelData(0); let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
       for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759; b2 = 0.969 * b2 + w * 0.153852; b3 = 0.8665 * b3 + w * 0.3104856; b4 = 0.55 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.016898; d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11; b6 = w * 0.115926; } }
+    if (!(c instanceof (window.OfflineAudioContext || window.webkitOfflineAudioContext || Object))) makeBank(c);
   }
   function setTempo(now) {
     if (!N) return; const d = 60 / S.bpm * 0.75, t = ctx.currentTime;
@@ -213,8 +230,8 @@ const Sound = (() => {
       for (const side of [-0.55, 0.55]) {
         const g = ctx.createGain(), f = biq('lowpass', bright, 0.9), end = t + dur + 1.8;
         const lfo = oscAt('sine', 0.12 + Math.random() * 0.12, t, end), lg = gainNode(bright * 0.22); lfo.connect(lg); lg.connect(f.frequency);
-        for (const m of notes) for (const det of side < 0 ? [-14, 3] : [-3, 14]) oscAt('sawtooth', mtof(m), t, end, det + (Math.random() - 0.5) * 4).connect(f);
-        env(g, t, att || Math.min(1.2, dur * 0.4), v * 0.62, 0.6, v * 0.5, 0.5, t + dur); f.connect(g); out(g, 0.55, 0.75, 0, side, true);
+        for (const m of notes) oscAt('sawtooth', mtof(m), t, end, side * 18 + (Math.random() - 0.5) * 6).connect(f);
+        env(g, t, att || Math.min(1.2, dur * 0.4), v * 0.85, 0.6, v * 0.7, 0.5, t + dur); f.connect(g); out(g, 0.55, 0.75, 0, side, true);
       }
     },
     arp(t, m, dur, v, cut, pan) {
@@ -486,18 +503,51 @@ const Sound = (() => {
   const VOWL = Object.keys(VOW).map(k => VOW[k]);
   const voicePitch = p => p <= 260 ? p : 260 + (p - 260) * 0.42; // 660 → 428 Hz, 330 → 289 Hz
   function syllable(when, pitch, len, vol, ch, radio) {
-    const t = ctx.currentTime + when, lc = (ch || '').toLowerCase(), [f1, f2] = VOW[lc] || VOWL[(Math.random() * VOWL.length) | 0];
-    const p = voicePitch(pitch), end = t + len + 0.25, bus = radio ? N.radioBus : N.voiceBus;
+    const p = voicePitch(pitch);
+    if (bank && !previewing) return sayClip(when, p, vol, ch, radio);
+    const lc = (ch || '').toLowerCase(), fm = VOW[lc] || VOWL[(Math.random() * VOWL.length) | 0];
+    syllableRaw(ctx.currentTime + when, p, len, vol, fm, Math.random() < 0.55, null, radio);
+  }
+  function syllableRaw(t, p, len, vol, fm, cons, to, radio) {
+    const [f1, f2] = fm, end = t + len + 0.25, bus = radio ? N.radioBus : N.voiceBus;
+    const out = () => to || dest(radio ? 0 : 0.08, bus);
     const body = oscAt('triangle', p, t, end), buzz = oscAt('sawtooth', p, t, end, 5);
     for (const o of [body, buzz]) { o.frequency.setValueAtTime(p * 1.05, t); o.frequency.exponentialRampToValueAtTime(p * 0.95, t + len); }
     const mix = ctx.createGain(), bg = gainNode(0.7); body.connect(bg); bg.connect(mix);
     for (const [f, q, a] of [[f1, 3, 0.55], [f2, 4, 0.22]]) { const b = biq('bandpass', f, q), fg = gainNode(a); buzz.connect(b); b.connect(fg); fg.connect(mix); }
     const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.016); g.gain.setTargetAtTime(0.0001, t + len * 0.65, len * 0.22);
-    mix.connect(g); g.connect(dest(radio ? 0 : 0.08, bus));
-    if (Math.random() < 0.55) { // a soft consonant 't/k/s' at the front of the syllable
+    mix.connect(g); g.connect(out());
+    if (cons) { // a soft consonant 't/k/s' at the front of the syllable
       const n = noise(t, 0.03, true), nb = biq('bandpass', 2600 + Math.random() * 1800, 1.2), ng = ctx.createGain();
-      ng.gain.setValueAtTime(vol * 0.35, t); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.025); n.connect(nb); nb.connect(ng); ng.connect(dest(0, bus));
+      ng.gain.setValueAtTime(vol * 0.35, t); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.025); n.connect(nb); nb.connect(ng); ng.connect(to || dest(0, bus));
     }
+  }
+  /* Talking is the busiest sound in the game (a syllable every ~70 ms), so the syllables are
+     baked once into little sound clips when the engine starts, then just played back at the
+     speaker's pitch. Live synthesis stays as the fallback until the clips are ready. */
+  const BANK_P = [130, 210, 330], BANK_LEN = 0.075, SLOT = 0.4, VKEYS = Object.keys(VOW);
+  function makeBank(live) {
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext; if (!OAC) return;
+    const sr = live.sampleRate, n = VKEYS.length * BANK_P.length * 2, saved = { ctx, N };
+    let off; try { off = new OAC(1, Math.ceil(sr * SLOT * n), sr); } catch (e) { return; }
+    try {
+      ctx = off; N = { pink: saved.N.pink, noise: saved.N.noise, voiceBus: off.destination, radioBus: off.destination, sfxVerb: null };
+      let k = 0; for (const v of VKEYS) for (const p of BANK_P) for (const cons of [0, 1]) { syllableRaw(k * SLOT + 0.002, p, BANK_LEN, 0.5, VOW[v], cons, off.destination); k++; }
+    } catch (e) { ctx = saved.ctx; N = saved.N; return; }
+    ctx = saved.ctx; N = saved.N;
+    const done = buf => {
+      if (ctx !== live || !N) return; const src = buf.getChannelData(0), len = Math.floor(sr * SLOT), out = {};
+      let k = 0; for (const v of VKEYS) { out[v] = []; for (const p of BANK_P) for (const cons of [0, 1]) { const b = live.createBuffer(1, len, sr); b.getChannelData(0).set(src.subarray(k * len, k * len + len)); out[v].push({ p, cons, b }); k++; } }
+      bank = out;
+    };
+    try { const r = off.startRendering(); if (r && r.then) r.then(done, () => { }); else off.oncomplete = e => done(e.renderedBuffer); } catch (e) { }
+  }
+  /** one syllable from the clips: nearest baked pitch, nudged to the exact one (stays within a few semitones) */
+  function sayClip(when, p, vol, ch, radio) {
+    const lc = (ch || '').toLowerCase(), set = bank[VOW[lc] ? lc : VKEYS[(Math.random() * VKEYS.length) | 0]], cons = Math.random() < 0.55 ? 1 : 0;
+    let best = null; for (const e of set) if (e.cons === cons && (!best || Math.abs(Math.log(e.p / p)) < Math.abs(Math.log(best.p / p)))) best = e;
+    const t = ctx.currentTime + when, s = ctx.createBufferSource(), g = ctx.createGain(); s.buffer = best.b; s.playbackRate.value = p / best.p;
+    g.gain.value = vol * 2; s.connect(g); g.connect(dest(radio ? 0 : 0.08, radio ? N.radioBus : N.voiceBus)); s.start(t); s.stop(t + SLOT);
   }
   /** radio squelch: the 'kssht' a walkie-talkie makes when it opens or closes */
   function squelch(when, v) {
@@ -592,8 +642,10 @@ const Sound = (() => {
     sfxNames: () => Object.keys(SFX),
     state: () => ({ mood: S.mood, pending: S.pendingMood, intensity: S.intensity, danger: S.danger, bpm: S.bpm }),
     /** Dev helper: is the engine alive? */
-    health: () => ({ state: ctx ? ctx.state : 'none', heals, lastHeal, live, rate: ctx ? ctx.sampleRate : 0 }),
+    health: () => ({ state: ctx ? ctx.state : 'none', heals, lastHeal, live, rate: ctx ? ctx.sampleRate : 0, clips: !!bank, heard }),
+    /** Settings 'Fix sound' button: rebuild everything from inside the tap, then play a chime */
+    repair() { if (!ctx) { ensure(); } else heal('fixed from settings'); wake(); unlock(); setTimeout(() => this.play('fixed'), 120); },
     /** Dev/test helper: pretend the graph broke, to check it heals */
-    _breakForTest(kind) { if (!ctx) return; if (kind === 'suspend') quiet(ctx.suspend()); else heal('test'); }
+    _breakForTest(kind) { if (!ctx) return; if (kind === 'suspend') quiet(ctx.suspend()); else if (kind === 'silence') N.master.disconnect(); else heal('test'); }
   };
 })();

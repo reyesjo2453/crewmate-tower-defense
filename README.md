@@ -117,7 +117,8 @@ An original, adaptive score synthesized live in `js/audio.js` (no audio files): 
 
 - **Voices:** story voices are soft syllables shaped by the vowels in the text being typed, with high voices pulled into a sweet range so nobody sounds shrill. Radio chatter goes through a walkie-talkie filter with a squelch at each end.
 - **Mastering:** everything runs through a glue compressor, a rumble cut, a gentle de-harsh shelf, a limiter and a soft clipper, so loud fights never crackle. The reverbs are generated in stereo, and their tails darken like a real room.
-- **Self-healing:** sound wakes itself up on the next tap after the phone pauses or interrupts it (a call, Siri, the lock screen, switching apps). A watchdog rebuilds the whole audio engine if it ever stalls, so sound can't die for the rest of a session.
+- **Self-healing:** sound wakes itself up on the next tap after the phone pauses or interrupts it (a call, Siri, the lock screen, switching apps). A watchdog rebuilds the whole audio engine if its clock stalls, it outputs bad samples, or it goes dead silent while music should be playing, so sound can't die for the rest of a session. On iPhone and iPad the game asks for a media audio session, so the ring/silent switch doesn't mute it. **Settings → Fix sound** rebuilds the engine by hand and shows its status and the game version.
+- **Light on phones:** talking is the busiest sound (a syllable every ~70 ms), so the syllables are baked into tiny clips once at start-up and just played back at each speaker's pitch. Pads use half the oscillators they used to. This keeps slower phones from overloading their audio, which is what makes sound crackle and then cut out.
 
 `Sound.preview(mood, intensity, danger, seconds)` renders any mood offline, `Sound.previewSfx(name)` renders one sound effect (`'voice:330'` and `'chatter'` work too) and `Sound.health()` reports the engine's state, which is handy for tuning the mix.
 

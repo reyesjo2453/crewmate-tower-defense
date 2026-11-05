@@ -5,6 +5,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const TEST = /[?&]test/.test(location.search);
+  const BUILD = 'v11'; // keep in step with VERSION in sw.js
 
   /* ---------- Save ---------- */
   const SAVE_KEY = 'crewmate-command-v1';
@@ -224,7 +225,7 @@
       b.onclick = () => { save.diff = k; persist(); Sound.play('click'); renderSettings(); }; seg.appendChild(b);
     });
     $('diffDesc').textContent = DIFFICULTY[save.diff].desc;
-    $('optMusic').checked = save.music; $('optSfx').checked = save.sfx;
+    $('optMusic').checked = save.music; $('optSfx').checked = save.sfx; soundInfo();
     $('optCb').checked = !!save.a11y.cb; $('optBig').checked = !!save.a11y.big; $('optVib').checked = save.a11y.vib !== false; $('optCalm').checked = !!save.a11y.calm; $('optNums').checked = save.a11y.nums !== false;
   }
   $('optCb').onchange = e => { save.a11y.cb = e.target.checked; applyPrefs(); persist(); };
@@ -234,6 +235,12 @@
   $('optNums').onchange = e => { save.a11y.nums = e.target.checked; applyPrefs(); persist(); };
   $('optMusic').onchange = e => { save.music = e.target.checked; Sound.setMusic(save.music); persist(); };
   $('optSfx').onchange = e => { save.sfx = e.target.checked; Sound.setSfx(save.sfx); persist(); Sound.play('click'); };
+  /** a small status line, so a player (or a grown-up helping) can see the sound engine is alive */
+  function soundInfo() {
+    const h = Sound.health(), st = { running: 'on', suspended: 'paused — tap anywhere', interrupted: 'paused by the device — tap anywhere', none: 'starts on your first tap' }[h.state] || h.state;
+    $('soundInfo').textContent = 'Sound: ' + st + (h.rate ? ' · ' + (h.rate / 1000).toFixed(1) + ' kHz' : '') + (h.heals ? ' · restarted ' + h.heals + '×' : '') + ' · game ' + BUILD;
+  }
+  $('btnFixSound').onclick = () => { Sound.repair(); $('btnFixSound').textContent = '🔊 Sound restarted ✓'; setTimeout(soundInfo, 400); };
   $('btnTutAgain').onclick = () => { save.tutDone = false; persist(); $('btnTutAgain').textContent = 'Tutorial will play in Mission 1 ✓'; };
   $('btnReset').onclick = () => confirmBox('Reset everything?', 'This erases your stars, unlocks and logbook.', 'Reset', () => { save = defaults(); applyPrefs(); persist(); Sound.setMusic(save.music); Sound.setSfx(save.sfx); renderSettings(); });
   $('setBack').onclick = () => { Sound.play('click'); toTitle(); };
@@ -870,7 +877,14 @@
   addEventListener('resize', () => { if (current === 'title') Backdrop.start($('titleBg'), true); });
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !TEST) {
-    addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => { }));
+    addEventListener('load', () => navigator.serviceWorker.register('./sw.js').then(r => r.update()).catch(() => { }));
+    // a new version took over while this page still runs the old code: reload, but only somewhere calm
+    let had = !!navigator.serviceWorker.controller, reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!had) { had = true; return; }
+      const go = () => { if (reloaded) return; reloaded = true; location.reload(); };
+      if (current === 'title') go(); else { const w = setInterval(() => { if (current === 'title') { clearInterval(w); go(); } }, 1000); }
+    });
   }
   if (TEST) window.__t = { G, save: () => save, playLevel, toSquad, Wardrobe, squad: () => squad, toHub, toEndless, toLog, toSettings, checkMedals, saveCode, readCode, mods: m => { if (m) chosenMods = m; return chosenMods; }, lvl: () => lvl, LEVELS, beginGame, setLevel: l => { lvl = l; }, persist, unlock: () => { LEVELS.forEach(l => { save.stars[l.id] = save.stars[l.id] || 1; }); persist(); } };
 })();

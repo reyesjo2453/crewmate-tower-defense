@@ -1,5 +1,5 @@
 /* Offline cache. Bump VERSION whenever any cached file changes. */
-const VERSION = 'v10';
+const VERSION = 'v11';
 const CACHE_PREFIX = `crewmate-command-${new URL(self.registration.scope).pathname}-`;
 const CACHE_NAME = CACHE_PREFIX + VERSION;
 const SHELL = [
@@ -8,7 +8,7 @@ const SHELL = [
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png'
 ];
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' }))) /* skip the browser's HTTP cache: never bake stale files into a new version */).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(
