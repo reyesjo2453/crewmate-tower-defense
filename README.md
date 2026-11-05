@@ -107,15 +107,19 @@ Mission 1 is a hand-held **tutorial** with Captain Juno (replayable in Settings)
 
 An original, adaptive score synthesized live in `js/audio.js` (no audio files): a tense D-minor theme in the spirit of the "hide and seek" style of space-thriller music.
 
-- **Title / map:** slow pads, a bell melody, a low drone.
-- **Story scenes:** quiet pads and distant bells.
-- **Battle** is layered and follows the fight: a ticking clock before the wave, then a pulsing bass, then four-on-the-floor drums and 16th-note arpeggios, then the full lead melody when the field is crowded or on the final wave.
+- **Title / map:** wide stereo pads, a bell melody, soft electric-piano chords, a low drone.
+- **Story scenes:** a gentle broken-chord theme on electric piano, slow string-like pads, a breath of 'space air' and a quiet bell melody that sits under the dialogue.
+- **Battle** is layered and follows the fight: a ticking clock before the wave, then a pulsing bass, then four-on-the-floor drums that make the pads 'breathe', stereo 16th-note arpeggios with a ping-pong echo and tom fills every fourth bar, then claps and the full lead melody when the field is crowded or on the final wave.
 - **Heartbeat:** fades in and speeds up as foes get close to the reactor or the ship's health runs low.
 - **Bosses** switch to a faster, darker groove with brass stabs and risers.
 - **Victory and defeat** each get a short sting.
 - **Sound effects** are layered (a noise transient, a pitched body and often a low thump), panned left or right by where they happen on the board, given a little room echo, and nudged in pitch each time so rapid fire doesn't sound robotic. The music dips under big moments (boss knockouts, explosions, skills), small sounds drop out first when the fight gets busy, and the music goes muffled while paused. A drum roll leads into every wave.
 
-`Sound.preview(mood, intensity, danger, seconds)` renders any mood offline, and `Sound.previewSfx(name)` renders one sound effect, which is handy for tuning the mix.
+- **Voices:** story voices are soft syllables shaped by the vowels in the text being typed, with high voices pulled into a sweet range so nobody sounds shrill. Radio chatter goes through a walkie-talkie filter with a squelch at each end.
+- **Mastering:** everything runs through a glue compressor, a rumble cut, a gentle de-harsh shelf, a limiter and a soft clipper, so loud fights never crackle. The reverbs are generated in stereo, and their tails darken like a real room.
+- **Self-healing:** sound wakes itself up on the next tap after the phone pauses or interrupts it (a call, Siri, the lock screen, switching apps). A watchdog rebuilds the whole audio engine if it ever stalls, so sound can't die for the rest of a session.
+
+`Sound.preview(mood, intensity, danger, seconds)` renders any mood offline, `Sound.previewSfx(name)` renders one sound effect (`'voice:330'` and `'chatter'` work too) and `Sound.health()` reports the engine's state, which is handy for tuning the mix.
 
 ## Controls
 
