@@ -5,7 +5,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const TEST = /[?&]test/.test(location.search);
-  const BUILD = 'v11'; // keep in step with VERSION in sw.js
+  const BUILD = 'v12'; // keep in step with VERSION in sw.js
 
   /* ---------- Save ---------- */
   const SAVE_KEY = 'crewmate-command-v1';

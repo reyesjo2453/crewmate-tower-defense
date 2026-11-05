@@ -409,6 +409,8 @@ class Game {
   }
 
   /* ---------- fx ---------- */
+  /** cosmetic: remember when and where a crewmate last struck, so each can play their own attack move */
+  swing(c, x, y) { c.atkAt = this.t; c.aimX = x; c.aimY = y; if (this.J) this.J.attack(c, x, y); }
   puff(x, y, color, n) { for (let i = 0; i < n; i++) { const a = this.rng() * 6.283, s = 20 + this.rng() * 60; this.fx.push({ k: 'puff', x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 20, color, r: 3 + this.rng() * 4, life: 0.5 + this.rng() * 0.3, age: 0 }); } }
   ring(x, y, r0, r1, color, life) { this.fx.push({ k: 'ring', x, y, r0, r1, color, life: life || 0.4, age: 0 }); }
   pluses(c) { this.fx.push({ k: 'plus', x: c.cx, y: c.cy - 40, life: 0.8, age: 0 }); }
@@ -557,35 +559,35 @@ class Game {
       c.blocking = c.blocking.filter(f => !f.dead && f.blockedBy === c);
       if (c.blocking.length) {
         const t = c.blocking[0]; c.facing = t.x >= c.cx ? 1 : -1;
-        if (c.atkT <= 0) { c.atkT = st.interval; this.hitFoe(t, st.atk); this.fx.push({ k: 'slash', x: t.x, y: t.y - 20, life: 0.2, age: 0 }); this.sfx(c.b.block >= 3 ? 'thump' : 'slash', t.x); if (this.J) this.J.slash(t); }
+        if (c.atkT <= 0) { c.atkT = st.interval; this.hitFoe(t, st.atk); this.swing(c, t.x, t.y - 20); if (!this.J) this.fx.push({ k: 'slash', x: t.x, y: t.y - 20, life: 0.2, age: 0 }); this.sfx(c.b.block >= 3 ? 'thump' : 'slash', t.x); if (this.J) this.J.slash(t, c); }
       }
       return;
     }
     if (c.atkT > 0) return;
     const r2 = (this.rangeOf(c) * TILE) ** 2;
     if (b.builds) { // Wrench: patch up the barricade
-      const w = c.wall; if (w && w.hp < this.stat(w).maxHp) { c.atkT = st.interval; w.hp = Math.min(this.stat(w).maxHp, w.hp + st.repair); this.fx.push({ k: 'line', x1: c.cx, y1: c.cy - 30, x2: w.cx, y2: w.cy - 20, color: '#ffcc1f', life: 0.18, age: 0 }); this.puff(w.cx, w.cy - 20, '#ffcc1f', 2); }
+      const w = c.wall; if (w && w.hp < this.stat(w).maxHp) { c.atkT = st.interval; w.hp = Math.min(this.stat(w).maxHp, w.hp + st.repair); this.swing(c, w.cx, w.cy - 20); if (!this.J) this.fx.push({ k: 'line', x1: c.cx, y1: c.cy - 30, x2: w.cx, y2: w.cy - 20, color: '#ffcc1f', life: 0.18, age: 0 }); this.puff(w.cx, w.cy - 20, '#ffcc1f', 2); }
       return;
     }
     if (b.shields) { // Bubbles: bubble the friend who needs it most (guards holding foes first)
       let best = null, bs = -1;
       for (const a of this.crew) { if (a.barricade || a === c || a.shield > 0 || dist2(a.cx, a.cy, c.cx, c.cy) > r2) continue; const sc = a.blocking.length * 2 + (a.b.block ? 1 : 0) + (1 - a.hp / this.stat(a).maxHp); if (sc > bs) { bs = sc; best = a; } }
-      if (best) { c.atkT = st.interval; this.giveShield(best); this.fx.push({ k: 'line', x1: c.cx, y1: c.cy - 30, x2: best.cx, y2: best.cy - 30, color: '#ffb6e8', life: 0.25, age: 0 }); }
+      if (best) { c.atkT = st.interval; this.giveShield(best); this.swing(c, best.cx, best.cy - 30); if (!this.J) this.fx.push({ k: 'line', x1: c.cx, y1: c.cy - 30, x2: best.cx, y2: best.cy - 30, color: '#ffb6e8', life: 0.25, age: 0 }); }
       return;
     }
     if (c.type === 'lumi') {
       let w = null, wr = 0.999;
       for (const a of this.crew) { if (dist2(a.cx, a.cy, c.cx, c.cy) > r2) continue; const q = a.hp / this.stat(a).maxHp; if (q < wr) { wr = q; w = a; } }
-      if (w) { c.atkT = st.interval; w.hp = Math.min(this.stat(w).maxHp, w.hp + st.heal); this.pluses(w); this.fx.push({ k: 'line', x1: c.cx, y1: c.cy - 30, x2: w.cx, y2: w.cy - 30, color: '#7dff9c', life: 0.2, age: 0 }); this.sfx('heal', w.cx); if (this.J) this.J.heal(w); }
+      if (w) { c.atkT = st.interval; w.hp = Math.min(this.stat(w).maxHp, w.hp + st.heal); this.pluses(w); this.swing(c, w.cx, w.cy - 24); if (!this.J) this.fx.push({ k: 'line', x1: c.cx, y1: c.cy - 30, x2: w.cx, y2: w.cy - 30, color: '#7dff9c', life: 0.2, age: 0 }); this.sfx('heal', w.cx); if (this.J) this.J.heal(w); }
       return;
     }
     // pick the foe closest to the reactor within range (Marshal: the toughest one)
     let t = null, rem = 1e9;
     for (const f of this.foes) { if (!this.visible(f)) continue; if (dist2(f.x, f.y - 20, c.cx, c.cy) > r2) continue; const left = b.strongest ? -f.hp : f.r.len - f.d; if (left < rem) { rem = left; t = f; } }
     if (!t) return;
-    c.facing = t.x >= c.cx ? 1 : -1; c.atkT = st.interval; c.fireT = 0.12;
-    if (c.type === 'rook') { this.shots.push({ x: c.cx + c.facing * 18, y: c.cy - 28, f: t, dmg: st.atk, speed: 900, color: '#ffe27a' }); this.sfx('shoot', c.cx); if (this.J) this.J.fire(c, false); }
-    else if (c.type === 'marshal') { this.shots.push({ x: c.cx + c.facing * 18, y: c.cy - 30, f: t, dmg: st.atk, speed: 1500, color: '#ff9a3d', pierce: true, big: true }); this.sfx('cannon', c.cx); if (this.J) this.J.fire(c, true); this.fx.push({ k: 'ring', x: c.cx + c.facing * 24, y: c.cy - 30, r0: 2, r1: 14, color: '#ffd24a', life: 0.15, age: 0 }); }
+    c.facing = t.x >= c.cx ? 1 : -1; c.atkT = st.interval; c.fireT = 0.12; this.swing(c, t.x, t.y - 24);
+    if (c.type === 'rook') { this.shots.push({ x: c.cx + c.facing * 34, y: c.cy - 4, f: t, dmg: st.atk, speed: 900, color: '#ffe27a' }); this.sfx('shoot', c.cx); if (this.J) this.J.fire(c, false); }
+    else if (c.type === 'marshal') { this.shots.push({ x: c.cx + c.facing * 46, y: c.cy - 4, f: t, dmg: st.atk, speed: 1500, color: '#ff9a3d', pierce: true, big: true }); this.sfx('cannon', c.cx); if (this.J) this.J.fire(c, true); this.fx.push({ k: 'ring', x: c.cx + c.facing * 46, y: c.cy - 4, r0: 2, r1: 14, color: '#ffd24a', life: 0.15, age: 0 }); }
     else if (c.type === 'sparky') {
       const ar = st.aoe * TILE, hit = new Set();
       for (const f of this.foes) if (this.visible(f) && dist2(f.x, f.y, t.x, t.y) <= ar * ar) hit.add(f);
@@ -594,7 +596,7 @@ class Game {
       hit.forEach(f => this.hitFoe(f, st.atk, true)); this.sfx('zap', t.x); if (this.J) this.J.zap(t.x, t.y - 20);
     } else if (c.type === 'echo') {
       this.hitFoe(t, st.atk); if (!t.def.steady) { t.slowT = b.slowT; t.slowMul = Math.min(t.slowMul, b.slow); }
-      this.ring(t.x, t.y - 16, 4, 38, '#7df', 0.35); this.fx.push({ k: 'line', x1: c.cx, y1: c.cy - 40, x2: t.x, y2: t.y - 24, color: '#7df', life: 0.12, age: 0 }); this.sfx('ping', t.x);
+      this.ring(t.x, t.y - 16, 4, 38, '#7df', 0.35); if (!this.J) this.fx.push({ k: 'line', x1: c.cx, y1: c.cy - 40, x2: t.x, y2: t.y - 24, color: '#7df', life: 0.12, age: 0 }); this.sfx('ping', t.x);
     }
   }
   updateShots(dt) {
@@ -785,8 +787,13 @@ class Game {
     const b = c.b, spawnK = this.J ? 1 : Math.min(1, (this.t - c.born) / 0.25), s = 62 * (0.6 + 0.4 * spawnK) * (b.block >= 3 ? 1.1 : 1);
     if (c.skillT > 0) { const g = ctx.createRadialGradient(c.cx, c.cy, 4, c.cx, c.cy, 44); g.addColorStop(0, 'rgba(255,240,140,.55)'); g.addColorStop(1, 'rgba(255,240,140,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.cx, c.cy, 44, 0, 6.3); ctx.fill(); }
     const lk = lookFor(c.type), feet = c.cy + 26;
-    if (this.J) { const [px, py, ox, oy] = this.J.crewPose(c); ctx.save(); ctx.translate(c.cx + ox, feet + oy); ctx.scale(px, py); ctx.translate(-c.cx, -feet); }
+    if (this.J) { const [px, py, ox, oy, rot] = this.J.crewPose(c); ctx.save(); ctx.translate(c.cx + ox, feet + oy); if (rot) ctx.rotate(rot * c.facing); ctx.scale(px, py); ctx.translate(-c.cx, -feet); }
     drawCrewmate(ctx, c.cx, feet, s, { color: b.color, hat: lk.hat, visor: lk.visor, pet: lk.pet, facing: c.facing, t: T_ + c.id, flash: c.flash * 6, wide: b.block >= 3 ? 1.15 : 1, idle: true });
+    { // their own gear, aimed at whatever they last hit
+      const ph = c.atkAt != null ? this.t - c.atkAt : null, bob = Math.sin((T_ + c.id) * 5) * 1.2, hx = c.cx + c.facing * 16 * s / 64, hy = feet - 28 * s / 64;
+      const aim = c.atkAt != null ? Math.max(-1.1, Math.min(0.9, Math.atan2(c.aimY - hy, Math.abs(c.aimX - hx) + 1))) : 0.1;
+      ctx.save(); ctx.translate(c.cx, feet - bob * s / 64); drawTool(ctx, c.type, s, c.facing, ph, aim, b.color, T_ + c.id); ctx.restore();
+    }
     if (this.J) ctx.restore();
     if (c.shield > 0) drawShield(ctx, c.cx, c.cy + 26, s, T_ + c.id, c.shield);
   }

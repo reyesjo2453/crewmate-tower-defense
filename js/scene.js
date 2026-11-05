@@ -151,7 +151,7 @@ class Scene {
       if (c.barricade) continue;
       const lo = dark > 0.3 ? Math.max(1.1, g.rangeOf(c) * 0.8) : 1.3;
       add(c.cx, c.cy, lo * TILE, c.skillT > 0 ? '255,240,150' : '255,244,226', c.skillT > 0 ? 1 : 0.7);
-      if (c.fireT > 0) add(c.cx + c.facing * 20, c.cy - 28, 0.9 * TILE, '255,220,140', 0.8);
+      if (c.fireT > 0) add(c.cx + c.facing * 36, c.cy - 4, 0.9 * TILE, '255,220,140', 0.8);
     }
     for (const s of g.shots) add(s.x, s.y, (s.big ? 0.8 : 0.5) * TILE, rgbOf(s.color), 0.8);
     for (const e of g.fx) {

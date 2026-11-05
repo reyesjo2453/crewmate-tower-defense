@@ -19,11 +19,12 @@ const FOE_TINT = {
   mender: '#e8f7d8', warden: '#46557e', rally: '#ff6fb5', conductor: '#9ab8ff'
 };
 const jr = (a, b) => a + Math.random() * (b - a);
+const setTimeoutish = (J, t, fn) => J.later.push({ t, fn }); // runs on game time, so it pauses with the game
 
 class Juice {
   constructor(g) { this.g = g; this.reset(); }
   reset() {
-    this.p = []; this.nums = []; this.hs = 0; this.hsCool = 0;
+    this.p = []; this.later = []; this.nums = []; this.hs = 0; this.hsCool = 0;
     this.zoom = 1; this.zt = 1; this.zx = 0; this.zy = 0; this.zHold = 0;
     this.flash = 0; this.flashC = '255,255,255'; this.vig = 0; this.lastKill = null; this.bossHitCool = 0;
   }
@@ -34,6 +35,7 @@ class Juice {
     if (this.hs > 0) this.hs -= dt;
     this.hsCool -= dt; this.bossHitCool -= dt * rate;
     const pdt = dt * rate;
+    for (let i = this.later.length - 1; i >= 0; i--) { const l = this.later[i]; l.t -= pdt; if (l.t <= 0) { this.later.splice(i, 1); l.fn(); } }
     for (let i = this.p.length - 1; i >= 0; i--) {
       const e = this.p[i]; e.age += pdt;
       if (e.age >= e.life) { this.p.splice(i, 1); continue; }
@@ -115,12 +117,37 @@ class Juice {
   }
   shotHit(x, y, s) { this.sparks(x, y, s.color, s.big ? 9 : 5, s.a != null ? s.a + Math.PI : null, 0.9, s.big ? 360 : 240); }
   fire(c, big) {
-    const x = c.cx + c.facing * (big ? 26 : 20), y = c.cy - (big ? 30 : 28);
-    this.p.push({ k: 'muzzle', x, y, dir: c.facing, big, life: 0.07, age: 0 });
-    if (big) this.sparks(x, y, '#ffd24a', 4, c.facing > 0 ? 0 : Math.PI, 0.5, 300);
+    const x = c.cx + c.facing * (big ? 46 : 34), y = c.cy - 4;
+    this.p.push({ k: 'muzzle', x, y, dir: c.facing, big, life: big ? 0.09 : 0.06, age: 0 });
+    // spent casing flips out the back
+    this.p.push({ k: 'chunk', x: c.cx + c.facing * 14, y: c.cy - 4, vx: -c.facing * jr(60, 120), vy: jr(-220, -160), grav: 900, drag: 0.5, rot: 0, vr: jr(-20, 20), s: big ? 4 : 3, color: '#e8c25a', floor: c.cy + 24, life: 0.6, age: 0 });
+    if (big) { this.sparks(x, y, '#ffd24a', 5, c.facing > 0 ? 0 : Math.PI, 0.45, 320); this.smoke(x, y, 4); }
+  }
+  smoke(x, y, n) { for (let i = 0; i < n; i++) this.p.push({ k: 'dust', x: x + jr(-4, 4), y: y + jr(-4, 4), vx: jr(-20, 20), vy: jr(-50, -20), drag: 2.5, r: jr(4, 8), color: '170,170,185', life: jr(0.5, 0.8), age: 0 }); }
+  /** every crewmate's own attack effect (the engine has already done the damage) */
+  attack(c, x, y) {
+    const f = c.facing;
+    switch (c.type) {
+      case 'brick': // hammer lands: impact star, ground dust, chips
+        this.p.push({ k: 'smash', x, y: y + 8, life: 0.26, age: 0, delay: 0.1, color: '255,204,31' });
+        setTimeoutish(this, 0.1, () => { this.dust(x, y + 44, 6, '210,190,160'); this.sparks(x, y + 6, '#ffcc1f', 6, -Math.PI / 2, 1.2, 260); this.freeze(0.03); });
+        break;
+      case 'tank': // shield bash: a violet shock-arc pushes out
+        this.p.push({ k: 'bash', x: c.cx + f * 34, y: c.cy - 8, dir: f, life: 0.28, age: 0 });
+        this.sparks(x, y, '#d8c8ff', 4, f > 0 ? 0 : Math.PI, 0.7, 220);
+        break;
+      case 'sparky': this.twinkle(c.cx + f * 26, c.cy - 30, '#fff48a', 3, 6); break;
+      case 'echo': this.p.push({ k: 'sonar', x0: c.cx + f * 38, y0: c.cy - 4, x1: x, y1: y, life: 0.32, age: 0 }); break;
+      case 'lumi': this.p.push({ k: 'beam', x0: c.cx + f * 42, y0: c.cy - 6, x1: x, y1: y, life: 0.34, age: 0, color: '125,255,156', cross: true }); break;
+      case 'bubbles': this.p.push({ k: 'bubble', x0: c.cx + f * 34, y0: c.cy - 22, x1: x, y1: y, life: 0.38, age: 0 }); break;
+      case 'wrench': // welding: bright arc + a shower of sparks at the barricade
+        this.p.push({ k: 'beam', x0: c.cx + f * 40, y0: c.cy - 12, x1: x, y1: y, life: 0.16, age: 0, color: '255,214,120' });
+        this.sparks(x, y, '#ffb347', 7, -Math.PI / 2, 1.3, 240);
+        break;
+    }
   }
   zap(x, y) { this.sparks(x, y, '#fff48a', 6, null, 0, 220); }
-  slash(f) { this.sparks(f.x, f.y - 22, '#ffffff', 3, null, 0, 180); }
+  slash(f, c) { if (!c || c.type !== 'brick') this.sparks(f.x, f.y - 22, '#ffffff', 3, null, 0, 180); }
   kill(f) {
     if (f.jAcc) this.flushNum(f);
     const g = this.g, size = f.def.size || 1, tint = FOE_TINT[f.type] || '#7a4a9c', floor = f.y + (f.air ? 40 : 26);
@@ -171,12 +198,26 @@ class Juice {
     else if (age < 0.7) { const u = age - 0.12, d = Math.exp(-u * 8) * Math.cos(u * 26); sy *= 1 - 0.26 * d; sx *= 1 + 0.2 * d; }
     if (c.jPromo != null) { const u = g.t - c.jPromo; if (u < 0.6) { const d = Math.exp(-u * 7) * Math.sin(u * 24); sy *= 1 + 0.22 * d; sx *= 1 - 0.14 * d; } }
     if (c.jSkill != null) { const u = g.t - c.jSkill; if (u < 0.34) { oy -= 16 * Math.sin(Math.PI * u / 0.34); sy *= 1 + 0.08 * Math.sin(Math.PI * u / 0.34); } }
-    if (!c.barricade) {
-      const since = g.stat(c).interval - c.atkT;
-      if (since >= 0 && since < 0.16 && age > 0.4) { const p = 1 - since / 0.16; ox += c.facing * (c.b.block > 0 ? 9 : -5) * p; sx *= 1 + 0.07 * p; sy *= 1 - 0.07 * p; }
+    let rot = 0;
+    if (!c.barricade && c.atkAt != null && age > 0.4 && !JUICE.calm) {
+      const P = g.t - c.atkAt, f = c.facing, bell = (a, b) => P > a && P < b ? Math.sin(Math.PI * (P - a) / (b - a)) : 0;
+      switch (c.type) {
+        case 'brick': { // rear back, then hop into the slam and squash on landing
+          rot -= 0.14 * bell(0, 0.08); rot += 0.2 * bell(0.07, 0.22); ox += 10 * bell(0.06, 0.24);
+          oy -= 8 * bell(0.02, 0.11); const land = bell(0.11, 0.3); sy *= 1 - 0.16 * land; sx *= 1 + 0.14 * land; break;
+        }
+        case 'tank': { const b = bell(0, 0.3); ox += 14 * b; rot += 0.12 * b; sx *= 1 + 0.06 * b; break; } // shoulder charge
+        case 'rook': { const b = bell(0, 0.12); ox -= 5 * b; rot -= 0.06 * b; break; }                   // snappy recoil
+        case 'marshal': { const b = bell(0, 0.28); ox -= 11 * b; rot -= 0.16 * b; sy *= 1 - 0.08 * b; sx *= 1 + 0.06 * b; break; } // heavy kick
+        case 'sparky': { const b = bell(0, 0.24); oy -= 10 * b; sy *= 1 + 0.14 * b; sx *= 1 - 0.08 * b; break; } // jump & stretch, charged
+        case 'echo': { const b = bell(0, 0.3); sx *= 1 + 0.08 * b; sy *= 1 + 0.08 * b; rot += 0.05 * Math.sin(P * 30) * b; break; } // hum-pulse
+        case 'lumi': { const b = bell(0, 0.4); oy -= 6 * b; rot += 0.08 * b; break; }                      // gentle float forward
+        case 'wrench': { const b = bell(0, 0.3); rot += 0.12 * Math.sin(P * 40) * b; ox += 3 * b; break; } // put your back into it
+        case 'bubbles': { const p = bell(0, 0.14), r = bell(0.14, 0.32); sx *= 1 + 0.14 * p - 0.06 * r; sy *= 1 - 0.1 * p + 0.08 * r; break; } // big breath, then puff
+      }
     }
     if (c.flash > 0) { const p = c.flash / 0.12; sx *= 1 + 0.1 * p; sy *= 1 - 0.1 * p; }
-    return [sx, sy, ox, oy];
+    return [sx, sy, ox, oy, rot];
   }
   foePose(f) {
     const g = this.g; let sx = 1, sy = 1, ox = 0, rot = 0;
@@ -214,6 +255,35 @@ class Juice {
         case 'muzzle': {
           ctx.globalAlpha = 1 - q; ctx.translate(e.x, e.y); ctx.fillStyle = e.big ? '#ffd24a' : '#fff4b0'; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 12;
           const L = e.big ? 22 : 14, W = e.big ? 9 : 6; ctx.beginPath(); ctx.moveTo(0, -W); ctx.lineTo(e.dir * L, 0); ctx.lineTo(0, W); ctx.lineTo(-e.dir * 4, 0); ctx.closePath(); ctx.fill(); break;
+        }
+        case 'smash': { // hammer impact: a jagged star + a flat ground ring
+          if (e.age < e.delay) break; const k = (e.age - e.delay) / (e.life - e.delay);
+          ctx.translate(e.x, e.y); ctx.globalAlpha = 1 - k; ctx.fillStyle = `rgba(${e.color},1)`; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5;
+          const R = 10 + 18 * Math.sqrt(k); ctx.beginPath(); for (let i = 0; i < 16; i++) { const a = i / 16 * 6.283, r = i % 2 ? R * 0.45 : R; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); } ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.strokeStyle = `rgba(255,230,160,${1 - k})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(0, 36, 12 + 30 * k, 4 + 8 * k, 0, 0, 6.3); ctx.stroke(); break;
+        }
+        case 'bash': {
+          ctx.translate(e.x, e.y); ctx.scale(e.dir, 1); ctx.globalAlpha = 1 - q; ctx.strokeStyle = '#cbb8ff'; ctx.shadowColor = '#a58bff'; ctx.shadowBlur = 10;
+          for (let i = 0; i < 3; i++) { ctx.lineWidth = 5 - i * 1.3; ctx.beginPath(); ctx.arc(-6 + q * 22 + i * 7, 0, 18 + i * 6, -0.95, 0.95); ctx.stroke(); } break;
+        }
+        case 'sonar': { // three arcs ride out to the target
+          const a = Math.atan2(e.y1 - e.y0, e.x1 - e.x0); ctx.strokeStyle = '#7df0ff'; ctx.shadowColor = '#7df0ff'; ctx.shadowBlur = 8;
+          for (let i = 0; i < 3; i++) { const k = q * 1.4 - i * 0.2; if (k < 0 || k > 1) continue; const x = e.x0 + (e.x1 - e.x0) * k, y = e.y0 + (e.y1 - e.y0) * k;
+            ctx.globalAlpha = 1 - k * 0.6; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, 7 + k * 8, a - 0.9, a + 0.9); ctx.stroke(); } break;
+        }
+        case 'beam': { // wavy heal / weld beam, with crosses riding along for the medic
+          const dx = e.x1 - e.x0, dy = e.y1 - e.y0, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L, grow = Math.min(1, q * 4);
+          ctx.globalAlpha = 1 - q; ctx.strokeStyle = `rgb(${e.color})`; ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = 10; ctx.lineWidth = 3.5;
+          ctx.beginPath(); for (let i = 0; i <= 16; i++) { const k = i / 16 * grow, w = Math.sin(k * 14 - e.age * 40) * 3 * Math.sin(k * Math.PI); ctx.lineTo(e.x0 + dx * k + nx * w, e.y0 + dy * k + ny * w); } ctx.stroke();
+          if (e.cross) { ctx.shadowBlur = 0; ctx.fillStyle = '#eafff0'; for (let i = 0; i < 2; i++) { const k = (q * 1.6 + i * 0.45) % 1, x = e.x0 + dx * k, y = e.y0 + dy * k; ctx.fillRect(x - 1.5, y - 5, 3, 10); ctx.fillRect(x - 5, y - 1.5, 10, 3); } }
+          break;
+        }
+        case 'bubble': { // a bubble floats over in an arc, then pops
+          const k = Math.min(1, q / 0.8), x = e.x0 + (e.x1 - e.x0) * k, y = e.y0 + (e.y1 - e.y0) * k - Math.sin(k * Math.PI) * 26;
+          if (q < 0.8) { const r = 6 + 4 * k; ctx.globalAlpha = 0.9; ctx.fillStyle = 'rgba(255,190,232,.35)'; ctx.strokeStyle = '#ffd6f2'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(x, y + Math.sin(e.age * 30) * 1.5, r, 0, 6.3); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x - r * 0.35, y - r * 0.35, r * 0.22, 0, 6.3); ctx.fill(); }
+          else { const p = (q - 0.8) / 0.2; ctx.globalAlpha = 1 - p; ctx.strokeStyle = '#ffd6f2'; ctx.lineWidth = 2; for (let i = 0; i < 6; i++) { const a = i * 1.047; ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * (8 + p * 6), y + Math.sin(a) * (8 + p * 6)); ctx.lineTo(x + Math.cos(a) * (12 + p * 10), y + Math.sin(a) * (12 + p * 10)); ctx.stroke(); } }
+          break;
         }
         case 'boom': {
           const r = e.r * (0.35 + 0.65 * Math.sqrt(q)), gr = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, r);

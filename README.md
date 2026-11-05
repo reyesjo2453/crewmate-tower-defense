@@ -88,6 +88,7 @@ The Logbook's **Medals** tab tracks 27 goals, such as winning without losing a h
 
 ### Feel and accessibility
 
+- **Everyone fights their own way:** each crewmate carries their own gear and has their own attack move. Brick winds up and slams a sledgehammer, Tank shoulder-charges with a riot shield, Rook snaps off pistol shots, Marshal's rifle kicks hard and spits shell casings, Sparky jumps and crackles a tesla rod, Echo pings sonar arcs, Lumi sprays a healing beam, Wrench welds, and Bubbles blows a bubble that floats over and pops.
 - **Hits that land:** a split-second hit-pause on big blows, knockback, crewmates that drop in and squash on landing, lunge when they attack and bounce when promoted, and foes that squash, flash, then burst into tumbling debris.
 - **Particles:** sparks off every bullet and blade, muzzle flashes, dust when crew land or doors slam, healing twinkles, and fireball blasts.
 - **Damage numbers** pop over foes (hits in quick succession merge into one number; yellow for electric, orange for armour-piercing).

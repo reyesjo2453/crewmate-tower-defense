@@ -346,6 +346,112 @@ function drawCrewmate(ctx, x, y, s, o) {
   if (o.pet && o.pet !== 'none') drawPet(ctx, o.pet, x - 30 * u * f, y - 4 * u, s * 0.42, o.t || 0, col, f);
 }
 
+/* ---------- held tools: every crewmate fights with their own gear ----------
+   Drawn in the crewmate's own space (feet at 0,0, facing +x, 64 px tall bean).
+   ph = seconds since their last attack (Infinity if none), aim = angle to the
+   target in that space, col = body colour, T = clock. */
+const ease = q => q <= 0 ? 0 : q >= 1 ? 1 : 1 - Math.pow(1 - q, 3);
+function mitt(ctx, x, y, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, 6, 0, 6.3); ctx.fill(); ctx.stroke(); }
+function drawTool(ctx, type, s, facing, ph, aim, col, T) {
+  const u = s / 64, P = ph == null ? 1e9 : ph;
+  ctx.save(); ctx.scale(u * facing, u);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 3;
+  const hand = shade(col, -0.08);
+  switch (type) {
+    case 'brick': { // sledgehammer: wind up behind the head, then SLAM down in front
+      let a = -1.25 + Math.sin(T * 2) * 0.05;
+      if (P < 0.07) a = -1.25 - 1.1 * ease(P / 0.07);
+      else if (P < 0.13) a = -2.35 + 3.15 * ease((P - 0.07) / 0.06);
+      else if (P < 0.45) a = 0.8 - 2.05 * ease((P - 0.13) / 0.32);
+      const px = 12, py = -28, L = 34, hx = px + Math.cos(a) * L, hy = py + Math.sin(a) * L;
+      if (P > 0.07 && P < 0.2) { // motion smear
+        ctx.save(); ctx.globalAlpha = 0.45 * (1 - (P - 0.07) / 0.13); ctx.strokeStyle = '#fff'; ctx.lineWidth = 12;
+        ctx.beginPath(); ctx.arc(px, py, L, -2.3, Math.min(0.8, a)); ctx.stroke(); ctx.restore();
+      }
+      ctx.strokeStyle = OUTLINE; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(hx, hy); ctx.stroke();
+      ctx.strokeStyle = '#a8763c'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(hx, hy); ctx.stroke();
+      ctx.save(); ctx.translate(hx, hy); ctx.rotate(a); ctx.lineWidth = 3; ctx.strokeStyle = OUTLINE;
+      ctx.fillStyle = '#9aa6b8'; rr(ctx, -6, -11, 14, 22, 3); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#ffcc1f'; ctx.fillRect(-6, -2, 14, 4); ctx.restore();
+      mitt(ctx, px, py, hand); break;
+    }
+    case 'tank': { // riot shield: shoves forward on a bash
+      const push = P < 0.08 ? ease(P / 0.08) : P < 0.4 ? 1 - ease((P - 0.08) / 0.32) : 0, x = 22 + push * 12, tilt = -push * 0.15;
+      ctx.save(); ctx.translate(x, -32); ctx.rotate(tilt);
+      ctx.fillStyle = 'rgba(150,120,230,.55)'; rr(ctx, -5, -28, 14, 50, 6); ctx.fill(); ctx.lineWidth = 3.4; ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,.55)'; rr(ctx, -1, -22, 4, 34, 2); ctx.fill();
+      ctx.fillStyle = '#ffd84a'; ctx.beginPath(); ctx.arc(2, -3, 3.5, 0, 6.3); ctx.fill(); ctx.lineWidth = 2; ctx.stroke();
+      if (push > 0.4) { ctx.globalAlpha = push - 0.4; ctx.strokeStyle = '#e8dcff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(10, -3, 20, -0.9, 0.9); ctx.stroke(); }
+      ctx.restore(); break;
+    }
+    case 'rook': case 'marshal': { // pistol / long six-shooter rifle: aims, kicks back
+      const big = type === 'marshal', kick = P < (big ? 0.18 : 0.1) ? 1 - P / (big ? 0.18 : 0.1) : 0;
+      const a = aim - kick * (big ? 0.5 : 0.25), px = 16 - kick * (big ? 9 : 5), py = -28;
+      ctx.save(); ctx.translate(px, py); ctx.rotate(a);
+      if (big) {
+        ctx.fillStyle = '#6a4220'; rr(ctx, -12, -4, 16, 9, 3); ctx.fill(); ctx.stroke(); // stock
+        ctx.fillStyle = '#3a3f4c'; rr(ctx, 2, -4, 32, 7, 2); ctx.fill(); ctx.stroke();   // barrel
+        ctx.fillStyle = '#c9a24a'; ctx.fillRect(6, -2, 6, 4); ctx.fillRect(28, -2, 4, 4);
+      } else {
+        ctx.fillStyle = '#2d3a8c'; rr(ctx, -2, -5, 20, 9, 3); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#9fe8ff'; ctx.fillRect(4, -3, 9, 3); ctx.fillStyle = '#2d3a8c'; rr(ctx, -1, 2, 7, 9, 2); ctx.fill(); ctx.stroke();
+      }
+      if (kick > 0.5) { ctx.fillStyle = big ? '#ffd24a' : '#bff4ff'; ctx.globalAlpha = (kick - 0.5) * 2; ctx.beginPath(); ctx.arc(big ? 36 : 20, 0, big ? 7 : 4.5, 0, 6.3); ctx.fill(); }
+      ctx.restore(); mitt(ctx, px, py, hand); break;
+    }
+    case 'sparky': { // tesla rod: raised high, tip crackles bright when it fires
+      const lift = P < 0.06 ? ease(P / 0.06) : P < 0.35 ? 1 - ease((P - 0.06) / 0.29) : 0, a = -1.05 - lift * 0.45, px = 14, py = -26 - lift * 6, L = 28;
+      const tx = px + Math.cos(a) * L, ty = py + Math.sin(a) * L;
+      ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(tx, ty); ctx.stroke();
+      ctx.strokeStyle = '#c8ccd8'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(tx, ty); ctx.stroke();
+      const gl = 0.35 + 0.15 * Math.sin(T * 17) + lift * 0.65;
+      ctx.save(); ctx.shadowColor = '#fff48a'; ctx.shadowBlur = 8 + lift * 14; ctx.fillStyle = `rgba(255,244,138,${Math.min(1, gl + 0.2)})`;
+      ctx.beginPath(); ctx.arc(tx, ty, 5 + lift * 3, 0, 6.3); ctx.fill(); ctx.restore();
+      ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(tx, ty, 5 + lift * 3, 0, 6.3); ctx.stroke();
+      if (lift > 0.2) { ctx.strokeStyle = '#fffbd0'; ctx.lineWidth = 1.6; for (let i = 0; i < 3; i++) { const b = T * 40 + i * 2.1; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx + Math.cos(b) * 9, ty + Math.sin(b) * 9); ctx.lineTo(tx + Math.cos(b + 0.6) * 14, ty + Math.sin(b + 0.6) * 14); ctx.stroke(); } }
+      mitt(ctx, px, py, hand); break;
+    }
+    case 'echo': { // scanner: screen pings, little arcs leave the emitter
+      const k = P < 0.3 ? 1 - P / 0.3 : 0, px = 18, py = -26, a = aim * 0.6;
+      ctx.save(); ctx.translate(px, py); ctx.rotate(a);
+      ctx.fillStyle = '#2a3a4a'; rr(ctx, -4, -9, 18, 14, 3); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = `rgba(125,255,240,${0.45 + 0.4 * k + 0.15 * Math.sin(T * 6)})`; rr(ctx, -1, -6, 10, 8, 2); ctx.fill();
+      ctx.fillStyle = '#9aa6b8'; ctx.beginPath(); ctx.moveTo(14, -6); ctx.lineTo(20, -10); ctx.lineTo(20, 6); ctx.lineTo(14, 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+      if (k > 0) { ctx.strokeStyle = `rgba(125,240,255,${k})`; ctx.lineWidth = 2.5; for (let i = 0; i < 3; i++) { const r = 6 + ((1 - k) * 18 + i * 6); ctx.beginPath(); ctx.arc(20, -2, r, -0.7, 0.7); ctx.stroke(); } }
+      ctx.restore(); mitt(ctx, px, py, hand); break;
+    }
+    case 'lumi': { // med-spray: green vial glows and the nozzle puffs
+      const k = P < 0.35 ? 1 - P / 0.35 : 0, px = 17, py = -27, a = aim * 0.7 - 0.15;
+      ctx.save(); ctx.translate(px, py); ctx.rotate(a);
+      ctx.fillStyle = '#eef6f2'; rr(ctx, -4, -6, 22, 11, 4); ctx.fill(); ctx.stroke();
+      ctx.save(); ctx.shadowColor = '#7dff9c'; ctx.shadowBlur = 4 + k * 12; ctx.fillStyle = `rgba(90,240,122,${0.7 + 0.3 * k})`; rr(ctx, 1, -3.5, 11, 6, 2); ctx.fill(); ctx.restore();
+      ctx.fillStyle = '#d23a4a'; ctx.fillRect(4.5, -4.5, 2, 8); ctx.fillRect(1.5, -1.5, 8, 2);
+      ctx.fillStyle = '#9aa6b8'; rr(ctx, 18, -2.5, 7, 4, 1.5); ctx.fill(); ctx.stroke();
+      if (k > 0.3) { ctx.globalAlpha = k; ctx.fillStyle = '#c8ffd6'; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(28 + (1 - k) * 12 + i * 4, (i - 1) * 4 * (1 - k), 3 - i * 0.6, 0, 6.3); ctx.fill(); } }
+      ctx.restore(); mitt(ctx, px, py, hand); break;
+    }
+    case 'wrench': { // giant spanner: twists hard on each repair
+      const k = P < 0.3 ? Math.sin(P / 0.3 * Math.PI * 2) * (1 - P / 0.3) : 0, a = -0.7 + k * 0.9 + Math.sin(T * 2.2) * 0.04, px = 14, py = -26, L = 26;
+      ctx.save(); ctx.translate(px, py); ctx.rotate(a);
+      ctx.fillStyle = '#b8c2d0'; rr(ctx, 0, -3.5, L, 7, 3); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(L + 3, 0, 8, 0.75, 5.53); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#f07a1a'; rr(ctx, 2, -3.5, 9, 7, 3); ctx.fill(); ctx.stroke();
+      ctx.restore(); mitt(ctx, px, py, hand); break;
+    }
+    case 'bubbles': { // bubble wand: a bubble swells in the loop, then the wand flicks
+      const k = P < 0.12 ? ease(P / 0.12) : P < 0.4 ? 1 - ease((P - 0.12) / 0.28) : 0, a = -0.9 + k * 0.7, px = 15, py = -27, L = 20;
+      const rx = px + Math.cos(a) * L, ry = py + Math.sin(a) * L;
+      ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(rx, ry); ctx.stroke();
+      ctx.strokeStyle = '#ff9fd0'; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(rx, ry); ctx.stroke();
+      ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2; ctx.fillStyle = 'rgba(255,214,242,.35)'; const br = 6 + (P > 0.4 ? Math.min(3, (P - 0.4) * 2) : 0);
+      ctx.beginPath(); ctx.arc(rx + Math.cos(a) * 6, ry + Math.sin(a) * 6, br, 0, 6.3); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.beginPath(); ctx.arc(rx + Math.cos(a) * 6 - 2, ry + Math.sin(a) * 6 - 2, 1.6, 0, 6.3); ctx.fill();
+      mitt(ctx, px, py, hand); break;
+    }
+  }
+  ctx.restore();
+}
+
 function drawStars(ctx, x, y, n, size) {
   ctx.save(); ctx.translate(x, y); ctx.fillStyle = '#ffd84a'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.6;
   for (let i = 0; i < n; i++) {
