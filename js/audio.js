@@ -32,7 +32,10 @@ const Sound = (() => {
   /* ---------- lifecycle ---------- */
   function fresh() {
     const A = Ctor(); if (!A) return null;
-    try { return new A({ latencyHint: 'interactive' }); } catch (e) { try { return new A(); } catch (e2) { return null; } }
+    // Android phone speakers on 'interactive' (tiny buffers) can underrun — a whine, then the stream dies,
+    // while Bluetooth (big buffers) is fine. 'balanced' gives the speaker breathing room (~20 ms more delay).
+    const android = /Android/i.test(navigator.userAgent);
+    try { return new A({ latencyHint: android ? 'balanced' : 'interactive' }); } catch (e) { try { return new A(); } catch (e2) { return null; } }
   }
   function ensure() {
     if (previewing) return ctx;
