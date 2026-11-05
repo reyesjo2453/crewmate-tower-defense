@@ -315,9 +315,11 @@ const Sound = (() => {
     down: () => { osc(0, 420, 150, .38, 'triangle', .1); osc(.02, 210, 75, .38, 'triangle', .07); nz(0, .22, .1, 'lowpass', 800, 150); duck(.3, .4); },
     drill: () => { osc(0, 110, 180, .6, 'sawtooth', .09, { lp: 900 }); osc(.05, 55, 90, .6, 'square', .06, { lp: 500 }); nz(0, .6, .1, 'bandpass', 900, 300, 2); },
     medal: () => { arp([784, 988, 1175, 1568], .08, 'triangle', .12, .2, .45); nz(.1, .5, .02, 'highpass', 8000, 0, 0.7, .6); },
+    combo: () => { arp([784, 1175], .06, 'triangle', .12, .14, .45); osc(.08, 1568, 1760, .12, 'sine', .05, { wet: .6 }); nz(.06, .3, .02, 'highpass', 7000, 0, 0.7, .6); },
+    song: () => { arp([392, 494, 587, 784], .07, 'sine', .1, .3, .6); osc(0, 196, 0, .5, 'triangle', .07, { wet: .4, a: .04 }); duck(.25, .4); },
     bossIntro: () => { osc(0, 98, 49, 1.1, 'sawtooth', .14, { lp: 700 }); osc(.1, 147, 73, 1.1, 'square', .06, { lp: 700 }); osc(.5, 1568, 784, .4, 'sine', .05, { wet: .6 }); nz(0, 1.2, .16, 'lowpass', 220, 60); duck(.5, 1); }
   };
-  const THROTTLE = { bubble: 0.08, boom: 0.1, build: 0.2, fix: 0.05, shoot: 0.06, hit: 0.045, hitBig: 0.06, slash: 0.07, thump: 0.08, zap: 0.08, ping: 0.08, heal: 0.1, pop: 0.04, popBig: 0.06, cannon: 0.08 };
+  const THROTTLE = { bubble: 0.08, boom: 0.1, build: 0.2, fix: 0.05, shoot: 0.06, hit: 0.045, hitBig: 0.06, slash: 0.07, thump: 0.08, zap: 0.08, ping: 0.08, heal: 0.1, pop: 0.04, popBig: 0.06, cannon: 0.08, combo: 0.15 };
   // busy moments: the small, frequent sounds drop out first so the big ones stay clear
   const CHEAP = new Set(['shoot', 'hit', 'slash', 'thump', 'ping', 'pop', 'heal', 'zap', 'type']);
   const lastAt = {};

@@ -177,6 +177,11 @@ function drawHat(ctx, hat, color) {
       ctx.strokeStyle = '#ffe680'; ctx.lineWidth = 5; ctx.shadowColor = '#fff3a0'; ctx.shadowBlur = 10;
       ctx.beginPath(); ctx.ellipse(0, -72, 17, 5, 0, 0, 6.3); ctx.stroke(); ctx.shadowBlur = 0;
       break;
+    case 'note': // a bouncy music note on a spring
+      ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(0, -54); ctx.quadraticCurveTo(6, -60, 0, -64); ctx.quadraticCurveTo(-6, -68, 0, -72); ctx.stroke();
+      ctx.fillStyle = '#7affd6'; ctx.beginPath(); ctx.ellipse(-2, -76, 7, 5, -0.4, 0, 6.3); ctx.fill(); ctx.stroke();
+      ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(4, -77); ctx.lineTo(4, -96); ctx.quadraticCurveTo(12, -92, 14, -84); ctx.stroke();
+      break;
     case 'crown':
       ctx.fillStyle = '#ffd24a'; ctx.beginPath(); ctx.moveTo(-17, -52); ctx.lineTo(-19, -72); ctx.lineTo(-9, -62); ctx.lineTo(0, -76); ctx.lineTo(9, -62); ctx.lineTo(19, -72); ctx.lineTo(17, -52); ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.fillStyle = '#ff4d6a'; ctx.beginPath(); ctx.arc(0, -58, 3.4, 0, 6.3); ctx.fill(); ctx.fillStyle = '#42e8ff'; ctx.beginPath(); ctx.arc(-10, -57, 2.6, 0, 6.3); ctx.arc(10, -57, 2.6, 0, 6.3); ctx.fill();
@@ -238,6 +243,14 @@ function drawPet(ctx, pet, x, y, s, t, color, facing) {
       ctx.fillStyle = '#ff7ae0'; ctx.beginPath(); ctx.arc(Math.sin(t * 1.5) * 2.5, 0, 3.6, 0, 6.3); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(Math.sin(t * 1.5) * 2.5 - 1, -1.2, 1.2, 0, 6.3); ctx.fill();
       ctx.strokeStyle = 'rgba(214,139,255,.9)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(0, 0, 12, t * 2, t * 2 + 2.4); ctx.stroke();
+      break;
+    case 'choirling': // a little singing light with a note above it
+      ctx.translate(0, -17 + bob);
+      { const gl = ctx.createRadialGradient(0, 0, 2, 0, 0, 15); gl.addColorStop(0, 'rgba(122,255,214,.6)'); gl.addColorStop(1, 'rgba(122,255,214,0)'); ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(0, 0, 15, 0, 6.3); ctx.fill(); }
+      ctx.fillStyle = '#d8fff2'; ctx.beginPath(); ctx.arc(0, 0, 8, 0, 6.3); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = OUTLINE; ctx.beginPath(); ctx.arc(-3, -1.5, 1.4, 0, 6.3); ctx.arc(3, -1.5, 1.4, 0, 6.3); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(0, 3, 2, 1.5 + Math.abs(Math.sin(t * 4)) * 1.5, 0, 0, 6.3); ctx.fill();
+      ctx.globalAlpha *= 0.5 + 0.5 * Math.sin(t * 2.5); ctx.fillStyle = '#7affd6'; ctx.beginPath(); ctx.arc(8, -13 - (t * 6 % 6), 2.4, 0, 6.3); ctx.fill(); ctx.fillRect(9.4, -21 - (t * 6 % 6), 1.4, 8);
       break;
     case 'starling':
       ctx.translate(0, -17 + bob); ctx.rotate(Math.sin(t * 2) * 0.2);
@@ -538,6 +551,64 @@ function drawFoe(ctx, id, x, y, s, o) {
       ctx.strokeStyle = `rgba(214,139,255,${0.5 + 0.4 * Math.sin(T * 6)})`; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(-36, -100); ctx.lineTo(-30, -108); ctx.lineTo(-24, -100); ctx.lineTo(-18, -110); ctx.stroke();
       break;
     }
+    case 'mender': { // fuzzy moth with glitter dust
+      const hov = Math.sin(T * 3 + seed) * 2, flap = Math.sin(T * 14 + seed);
+      shadow(18, 5); ctx.scale(u * f, u); ctx.translate(0, hov); ctx.strokeStyle = OUTLINE; ctx.lineWidth = 3;
+      ctx.fillStyle = flash ? '#fff' : '#e8f7d8';
+      for (const sd of [-1, 1]) { ctx.save(); ctx.translate(-4, -30); ctx.scale(1, 0.55 + 0.45 * Math.abs(flap)); ctx.beginPath(); ctx.ellipse(-4, sd * 14, 20, 12, sd * 0.5, 0, 6.3); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#7dff9c'; ctx.beginPath(); ctx.arc(-8, sd * 15, 4.5, 0, 6.3); ctx.fill(); ctx.fillStyle = flash ? '#fff' : '#e8f7d8'; ctx.restore(); }
+      ctx.fillStyle = flash ? '#fff' : '#b6a48a'; ctx.beginPath(); ctx.ellipse(2, -28, 14, 11, 0, 0, 6.3); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#5a4a3a'; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(-6 + i * 6, -38); ctx.lineTo(-4 + i * 6, -18); ctx.lineWidth = 2; ctx.stroke(); } ctx.lineWidth = 3;
+      ctx.fillStyle = '#1a2a1a'; ctx.beginPath(); ctx.arc(12, -31, 3.2, 0, 6.3); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(13, -32, 1.2, 0, 6.3); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(10, -38); ctx.quadraticCurveTo(14, -50, 20, -50); ctx.moveTo(14, -37); ctx.quadraticCurveTo(22, -46, 26, -44); ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = `rgba(160,255,180,${0.6 + 0.4 * Math.sin(T * 5)})`; for (let i = 0; i < 4; i++) { const a = T * 1.5 + i * 1.57; ctx.beginPath(); ctx.arc(Math.cos(a) * 22, -26 + Math.sin(a) * 12 + ((T * 20 + i * 7) % 16), 1.8, 0, 6.3); ctx.fill(); }
+      break;
+    }
+    case 'warden': { // armored lantern-bearer
+      shadow(30, 8, 0.32); ctx.scale(u * f, u); ctx.strokeStyle = OUTLINE; ctx.lineWidth = 3.4;
+      const st = Math.sin(T * 4 + seed) * 2;
+      ctx.fillStyle = flash ? '#fff' : '#2c3550'; rr(ctx, -20, -16, 14, 16 + st, 5); ctx.fill(); ctx.stroke(); rr(ctx, 6, -16, 14, 16 - st, 5); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = flash ? '#fff' : '#46557e'; ctx.beginPath(); ctx.moveTo(-26, -14); ctx.lineTo(-28, -56); ctx.quadraticCurveTo(0, -84, 26, -56); ctx.lineTo(24, -14); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#8fa4d6'; ctx.beginPath(); ctx.moveTo(-28, -56); ctx.quadraticCurveTo(0, -84, 26, -56); ctx.quadraticCurveTo(0, -66, -28, -56); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#0d0a1e'; rr(ctx, -8, -54, 28, 14, 7); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#5ab8ff'; ctx.beginPath(); ctx.ellipse(8, -47, 9, 2.6, 0, 0, 6.3); ctx.fill();
+      // lantern on a pole
+      ctx.strokeStyle = '#2a2f40'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(28, -14); ctx.lineTo(30, -80); ctx.stroke(); ctx.strokeStyle = OUTLINE; ctx.lineWidth = 3;
+      const lp = 0.6 + 0.4 * Math.sin(T * 3 + seed);
+      const lg = ctx.createRadialGradient(30, -86, 2, 30, -86, 26); lg.addColorStop(0, `rgba(120,200,255,${0.7 * lp})`); lg.addColorStop(1, 'rgba(120,200,255,0)'); ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(30, -86, 26, 0, 6.3); ctx.fill();
+      ctx.fillStyle = '#c9e8ff'; rr(ctx, 22, -96, 16, 18, 4); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#5ab8ff'; ctx.beginPath(); ctx.arc(30, -87, 4 + lp, 0, 6.3); ctx.fill();
+      break;
+    }
+    case 'rally': { // a party drone with a speaker and flashing lights
+      const hov = Math.sin(T * 5 + seed) * 3, beat = Math.pow(Math.max(0, Math.sin(T * 9 + seed)), 6);
+      shadow(18, 4, 0.2); ctx.scale(u, u); ctx.translate(0, -36 + hov); ctx.strokeStyle = OUTLINE; ctx.lineWidth = 3;
+      ctx.strokeStyle = `rgba(255,110,130,${0.7 * beat})`; ctx.lineWidth = 3; for (const r of [26, 34]) { ctx.beginPath(); ctx.arc(0, 0, r + beat * 4, -0.6, 0.6); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, r + beat * 4, Math.PI - 0.6, Math.PI + 0.6); ctx.stroke(); }
+      ctx.strokeStyle = OUTLINE; ctx.lineWidth = 3;
+      ctx.fillStyle = flash ? '#fff' : '#ff6fb5'; rr(ctx, -18, -14, 36, 26, 9); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#2a1a30'; ctx.beginPath(); ctx.arc(0, -1, 9 + beat * 1.5, 0, 6.3); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#ff9ad6'; ctx.beginPath(); ctx.arc(0, -1, 3.5, 0, 6.3); ctx.fill();
+      const cols = ['#ffd84a', '#7affd6', '#5ab8ff']; for (let i = 0; i < 3; i++) { ctx.fillStyle = (Math.floor(T * 6) + i) % 3 === 0 ? cols[i] : '#5a3a50'; ctx.beginPath(); ctx.arc(-10 + i * 10, 10, 2.6, 0, 6.3); ctx.fill(); }
+      ctx.strokeStyle = '#3d4658'; ctx.beginPath(); ctx.moveTo(-12, -14); ctx.lineTo(-12, -22); ctx.moveTo(12, -14); ctx.lineTo(12, -22); ctx.stroke();
+      const rot = Math.sin(T * 40 + seed) * 10; ctx.beginPath(); ctx.moveTo(-12 - rot, -23); ctx.lineTo(-12 + rot, -23); ctx.moveTo(12 - rot, -23); ctx.lineTo(12 + rot, -23); ctx.stroke();
+      break;
+    }
+    case 'conductor': { // a tall crystal maestro with a glowing baton; colour = current song
+      const song = (typeof SONGS !== 'undefined' && SONGS[o.song]) || { color: '#ffd66b', rgb: '255,214,107' }, sw = Math.sin(T * 2.2);
+      shadow(44, 11, 0.36); ctx.scale(u * f, u); ctx.strokeStyle = OUTLINE; ctx.lineWidth = 4;
+      const gl = ctx.createRadialGradient(0, -70, 10, 0, -70, 90); gl.addColorStop(0, `rgba(${song.rgb},.45)`); gl.addColorStop(1, `rgba(${song.rgb},0)`); ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(0, -70, 90, 0, 6.3); ctx.fill();
+      ctx.fillStyle = flash ? '#fff' : '#1c2440'; ctx.beginPath(); ctx.moveTo(-38, 0); ctx.quadraticCurveTo(-30, -60, -18, -92); ctx.lineTo(18, -92); ctx.quadraticCurveTo(30, -60, 38, 0); ctx.closePath(); ctx.fill(); ctx.stroke(); // coat
+      ctx.fillStyle = '#2c3c66'; ctx.beginPath(); ctx.moveTo(-6, -92); ctx.lineTo(0, -20); ctx.lineTo(6, -92); ctx.fill();
+      ctx.fillStyle = '#e8eef8'; ctx.beginPath(); ctx.moveTo(-10, -90); ctx.lineTo(0, -78); ctx.lineTo(10, -90); ctx.closePath(); ctx.fill(); ctx.stroke(); // bow tie collar
+      ctx.fillStyle = song.color; ctx.beginPath(); ctx.moveTo(-9, -84); ctx.lineTo(0, -80); ctx.lineTo(-9, -76); ctx.closePath(); ctx.moveTo(9, -84); ctx.lineTo(0, -80); ctx.lineTo(9, -76); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = flash ? '#fff' : '#9ab8ff'; ctx.beginPath(); ctx.moveTo(-20, -94); ctx.lineTo(-14, -128); ctx.lineTo(0, -140); ctx.lineTo(14, -128); ctx.lineTo(20, -94); ctx.closePath(); ctx.fill(); ctx.stroke(); // crystal head
+      ctx.fillStyle = '#d8e6ff'; ctx.beginPath(); ctx.moveTo(-14, -128); ctx.lineTo(0, -140); ctx.lineTo(-2, -110); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = song.color; ctx.beginPath(); ctx.ellipse(2, -112, 11, 3.6, 0, 0, 6.3); ctx.fill();
+      // baton arm
+      ctx.save(); ctx.translate(26, -70); ctx.rotate(-0.9 + sw * 0.6); ctx.strokeStyle = '#1c2440'; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(26, 0); ctx.stroke();
+      ctx.strokeStyle = '#f4f0e0'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(26, 0); ctx.lineTo(58, 0); ctx.stroke();
+      ctx.fillStyle = song.color; ctx.shadowColor = song.color; ctx.shadowBlur = 14; ctx.beginPath(); ctx.arc(60, 0, 5, 0, 6.3); ctx.fill(); ctx.restore();
+      ctx.fillStyle = song.color; ctx.globalAlpha = 0.85; for (let i = 0; i < 3; i++) { const k = (T * 0.6 + i / 3) % 1; ctx.save(); ctx.translate(-40 - k * 20 + i * 30, -120 - k * 40); ctx.globalAlpha = 0.85 * (1 - k); ctx.beginPath(); ctx.ellipse(0, 0, 5, 3.6, -0.4, 0, 6.3); ctx.fill(); ctx.fillRect(3.5, -16, 2, 16); ctx.restore(); }
+      ctx.globalAlpha = 1;
+      break;
+    }
     case 'heart': {
       const pulse = 1 + Math.sin(T * 3) * 0.05;
       ctx.scale(u * pulse, u * pulse); ctx.translate(0, -52);
@@ -567,6 +638,25 @@ function drawMound(ctx, x, y, s, T) {
   ctx.fillStyle = '#4a3a2c'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 3;
   ctx.beginPath(); ctx.ellipse(0, -2, 26, 10 + Math.sin(T * 9) * 1.5, 0, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
   ctx.fillStyle = '#7a644c'; for (let i = 0; i < 4; i++) { const a = T * 6 + i * 1.6; ctx.beginPath(); ctx.arc(Math.cos(a) * 18, -10 - Math.abs(Math.sin(a)) * 8, 2.6, 0, 6.3); ctx.fill(); }
+  ctx.restore();
+}
+/** A foe's helping aura on the floor: a soft ring that breathes. rgb 'r,g,b'. */
+function drawAura(ctx, x, y, r, rgb, T, big) {
+  const p = 0.5 + 0.5 * Math.sin(T * 3);
+  ctx.save(); ctx.translate(x, y); ctx.scale(1, 0.42);
+  const g = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r); g.addColorStop(0, `rgba(${rgb},0)`); g.addColorStop(0.85, `rgba(${rgb},${0.1 + 0.08 * p})`); g.addColorStop(1, `rgba(${rgb},0)`);
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.3); ctx.fill();
+  ctx.strokeStyle = `rgba(${rgb},${0.35 + 0.25 * p})`; ctx.lineWidth = big ? 4 : 2.5; ctx.setLineDash([10, 8]); ctx.lineDashOffset = T * 20; ctx.beginPath(); ctx.arc(0, 0, r * (0.96 + 0.04 * p), 0, 6.3); ctx.stroke();
+  ctx.restore();
+}
+/** Little markers on a foe that another foe is helping: blue shield, red speed lines, green sparkles. */
+function drawBuffs(ctx, x, y, s, ward, haste, mend, T) {
+  if (!ward && !haste && !mend) return;
+  ctx.save(); const h = s * 0.9;
+  if (ward) { ctx.strokeStyle = `rgba(110,190,255,${0.55 + 0.25 * Math.sin(T * 5)})`; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.ellipse(x, y - h * 0.5, s * 0.42, h * 0.58, 0, 0, 6.3); ctx.stroke();
+    ctx.fillStyle = 'rgba(110,190,255,.12)'; ctx.fill(); }
+  if (haste) { ctx.strokeStyle = 'rgba(255,120,140,.8)'; ctx.lineWidth = 2.2; for (let i = 0; i < 3; i++) { const yy = y - h * (0.25 + i * 0.22), k = (T * 3 + i * 0.3) % 1; ctx.globalAlpha = 1 - k; ctx.beginPath(); ctx.moveTo(x - s * 0.45 - k * 10, yy); ctx.lineTo(x - s * 0.7 - k * 10, yy); ctx.stroke(); } ctx.globalAlpha = 1; }
+  if (mend) { ctx.fillStyle = '#7dff9c'; for (let i = 0; i < 2; i++) { const k = (T * 1.6 + i * 0.5) % 1, px = x + (i ? 10 : -12), py = y - h * 0.7 - k * 16; ctx.globalAlpha = 1 - k; ctx.fillRect(px - 1.5, py - 5, 3, 10); ctx.fillRect(px - 5, py - 1.5, 10, 3); } }
   ctx.restore();
 }
 /** Wrench's barricade on a floor tile; hp01 0..1, reinforced when Wrench's skill is on. */
@@ -674,6 +764,18 @@ function themeDecor(ctx, kind, T, rnd, th) {
     case 'crystal':
       ctx.fillStyle = '#8a5ad0'; ctx.beginPath(); ctx.moveTo(26, 52); ctx.lineTo(22, 26); ctx.lineTo(30, 12); ctx.lineTo(40, 28); ctx.lineTo(40, 52); ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.fillStyle = '#c9a0ff'; ctx.beginPath(); ctx.moveTo(30, 12); ctx.lineTo(40, 28); ctx.lineTo(32, 30); ctx.closePath(); ctx.fill(); break;
+    case 'lamp':
+      ctx.fillStyle = '#2a3048'; ctx.fillRect(29, 18, 6, 32); ctx.strokeRect(29, 18, 6, 32);
+      ctx.fillStyle = '#3a4260'; rr(ctx, 22, 46, 20, 7, 3); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#ffe9a8'; ctx.beginPath(); ctx.arc(32, 16, 8, 0, 6.3); ctx.fill(); ctx.stroke(); break;
+    case 'speaker':
+      ctx.fillStyle = '#2b2f44'; rr(ctx, 16, 12, 32, 40, 5); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#12141f'; ctx.beginPath(); ctx.arc(32, 38, 9, 0, 6.3); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.arc(32, 21, 5, 0, 6.3); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = th.glow; ctx.beginPath(); ctx.arc(32, 38, 3, 0, 6.3); ctx.fill(); break;
+    case 'planter':
+      ctx.fillStyle = '#6a5a8a'; rr(ctx, 12, 34, 40, 16, 4); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#3f9a6a'; for (const [dx, r] of [[20, 9], [32, 11], [44, 9]]) { ctx.beginPath(); ctx.arc(dx, 30, r, 0, 6.3); ctx.fill(); ctx.stroke(); }
+      ctx.fillStyle = '#ffd66b'; ctx.beginPath(); ctx.arc(22, 26, 3, 0, 6.3); ctx.arc(40, 24, 3, 0, 6.3); ctx.fill(); ctx.fillStyle = '#ff9ad6'; ctx.beginPath(); ctx.arc(31, 21, 3, 0, 6.3); ctx.fill(); break;
     case 'static':
       ctx.strokeStyle = th.glow; ctx.lineWidth = 2; ctx.globalAlpha = .7;
       for (let i = 0; i < 5; i++) { const y = 14 + i * 9; ctx.beginPath(); ctx.moveTo(10 + rnd() * 8, y); ctx.lineTo(54 - rnd() * 10, y); ctx.stroke(); } break;
@@ -704,7 +806,7 @@ function renderBoard(level, ppt) {
   const rnd = mulberry32(level.id * 7919 + 13);
   const path = dirsOf(level.routes), key = (x, y) => x + ',' + y;
   const high = new Set(level.high.map(p => key(p[0], p[1]))), walls = new Set((level.walls || []).map(p => key(p[0], p[1])));
-  const W_ = level.cols * TILE, H_ = level.rows * TILE;
+  const W_ = level.cols * TILE, H_ = level.rows * TILE, spots = [];
   // sky/space backdrop behind everything
   if (th.sky) { const g = ctx.createLinearGradient(0, 0, 0, H_); g.addColorStop(0, th.sky[0]); g.addColorStop(1, th.sky[1]); ctx.fillStyle = g; } else ctx.fillStyle = th.bg;
   ctx.fillRect(0, 0, W_, H_);
@@ -712,12 +814,19 @@ function renderBoard(level, ppt) {
     const px = x * TILE, py = y * TILE, kk = key(x, y), isPath = path.has(kk), isHigh = high.has(kk), isWall = walls.has(kk);
     ctx.save(); ctx.translate(px, py);
     if (isWall) {
+      spots.push({ kind: 'wall', x, y });
       ctx.fillStyle = th.wall; ctx.fillRect(0, 0, TILE, TILE);
       ctx.fillStyle = th.wallTop; ctx.fillRect(0, 0, TILE, TILE - 14);
       ctx.strokeStyle = OUTLINE; ctx.lineWidth = 3; ctx.strokeRect(1.5, 1.5, TILE - 3, TILE - 3);
       if (th.star) { // porthole showing space
         ctx.fillStyle = '#05070f'; ctx.beginPath(); ctx.arc(32, 28, 15, 0, 6.3); ctx.fill(); ctx.strokeStyle = '#9aa6bc'; ctx.lineWidth = 4; ctx.stroke();
         ctx.fillStyle = '#fff'; for (let i = 0; i < 5; i++) { ctx.fillRect(22 + rnd() * 20, 18 + rnd() * 20, 1.8, 1.8); }
+      } else if (th.wallKind === 'glass') { // a big window onto the aurora
+        const wg = ctx.createLinearGradient(0, 6, 0, 46); wg.addColorStop(0, '#0d1430'); wg.addColorStop(1, '#2a1d4a'); ctx.fillStyle = wg; rr(ctx, 7, 7, 50, 38, 6); ctx.fill();
+        ctx.save(); rr(ctx, 7, 7, 50, 38, 6); ctx.clip(); ctx.globalAlpha = 0.55; ctx.strokeStyle = '#7affd6'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(4, 30 + rnd() * 6); ctx.bezierCurveTo(20, 10, 40, 34, 60, 16 + rnd() * 8); ctx.stroke();
+        ctx.strokeStyle = '#b48aff'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(4, 22); ctx.bezierCurveTo(24, 36, 40, 10, 60, 28); ctx.stroke(); ctx.globalAlpha = 1;
+        ctx.fillStyle = '#fff'; for (let i = 0; i < 4; i++) ctx.fillRect(10 + rnd() * 44, 10 + rnd() * 30, 1.6, 1.6); ctx.restore();
+        ctx.strokeStyle = '#9aa6bc'; ctx.lineWidth = 3; rr(ctx, 7, 7, 50, 38, 6); ctx.stroke(); ctx.beginPath(); ctx.moveTo(32, 7); ctx.lineTo(32, 45); ctx.stroke();
       } else if (th.wallKind === 'rock') { // raw asteroid rock with ore veins
         ctx.fillStyle = shade(th.wall, -0.25); ctx.beginPath(); ctx.moveTo(4, 44); ctx.lineTo(10, 14); ctx.lineTo(30, 6); ctx.lineTo(54, 14); ctx.lineTo(60, 40); ctx.closePath(); ctx.fill();
         ctx.fillStyle = th.glow; ctx.globalAlpha = 0.8; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(16 + rnd() * 32, 14 + rnd() * 24, 2 + rnd() * 2, 0, 6.3); ctx.fill(); } ctx.globalAlpha = 1;
@@ -744,13 +853,14 @@ function renderBoard(level, ppt) {
     } else {
       ctx.fillStyle = (x + y) % 2 ? th.floorA : th.floorB; ctx.fillRect(0, 0, TILE, TILE);
       ctx.strokeStyle = th.seam; ctx.lineWidth = 1.6; ctx.strokeRect(0.8, 0.8, TILE - 1.6, TILE - 1.6);
-      if (rnd() < 0.34) themeDecor(ctx, th.decor[Math.floor(rnd() * th.decor.length)], TILE, rnd, th);
+      if (rnd() < 0.34) { const kind = th.decor[Math.floor(rnd() * th.decor.length)]; spots.push({ kind, x, y }); themeDecor(ctx, kind, TILE, rnd, th); }
     }
     ctx.restore();
   }
   // rim shadow
   const g = ctx.createRadialGradient(W_ / 2, H_ / 2, Math.min(W_, H_) * 0.45, W_ / 2, H_ / 2, Math.max(W_, H_) * 0.72);
   g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.4)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W_, H_);
+  cv.spots = spots; // decor & walls, so the scene layer can light and animate them
   return cv;
 }
 

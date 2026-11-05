@@ -1,10 +1,10 @@
 /* Offline cache. Bump VERSION whenever any cached file changes. */
-const VERSION = 'v8';
+const VERSION = 'v9';
 const CACHE_PREFIX = `crewmate-command-${new URL(self.registration.scope).pathname}-`;
 const CACHE_NAME = CACHE_PREFIX + VERSION;
 const SHELL = [
   './', './index.html', './style.css', './manifest.json',
-  './js/data.js', './js/art.js', './js/audio.js', './js/juice.js', './js/engine.js', './js/ui.js',
+  './js/data.js', './js/art.js', './js/audio.js', './js/juice.js', './js/scene.js', './js/engine.js', './js/ui.js',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png'
 ];
 self.addEventListener('install', e => {

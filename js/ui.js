@@ -17,7 +17,7 @@
   }
   let save = loadSave();
   function applyPrefs() {
-    STYLE.looks = save.looks; A11Y.cb = !!save.a11y.cb; JUICE.calm = !!save.a11y.calm; JUICE.nums = save.a11y.nums !== false;
+    STYLE.looks = save.looks; A11Y.cb = !!save.a11y.cb; JUICE.calm = !!save.a11y.calm; document.body.classList.toggle('calm', JUICE.calm); JUICE.nums = save.a11y.nums !== false;
     document.body.classList.toggle('big-ui', !!save.a11y.big);
   }
   applyPrefs();
@@ -30,7 +30,8 @@
   const bestEndless = () => Math.max(0, ...Object.values(save.endless));
   const endlessOpen = () => (save.stars[ENDLESS.unlockAfter] || 0) > 0;
   const foeTags = d => [d.flying && 'FLIES', d.stealth && 'SNEAKY', d.ranged && 'SHOOTS', d.boss && 'BOSS', d.def >= 40 && 'ARMORED', d.splits && 'SPLITS',
-    (d.burrow || d.drill) && 'BURROWS', d.drain && 'DRAINS DP', d.explodes && 'EXPLODES', d.steady && 'UNSLOWABLE'].filter(Boolean);
+    (d.burrow || d.drill) && 'BURROWS', d.drain && 'DRAINS DP', d.explodes && 'EXPLODES', d.steady && 'UNSLOWABLE',
+    d.mend && 'HEALS FOES', d.ward && 'SHIELDS FOES', d.rally && 'SPEEDS UP FOES', d.songs && 'SINGS'].filter(Boolean);
   // a friendly buzz on phones for big moments (Settings → Vibration)
   function buzz(p) { try { if (save.a11y.vib && navigator.vibrate) navigator.vibrate(p); } catch (e) { } }
   // little pop-up for medals and level-ups
@@ -53,7 +54,9 @@
   /* ---------- Screens ---------- */
   let current = 'title';
   function show(id) {
+    const was = current;
     document.querySelectorAll('.screen').forEach(s => s.classList.toggle('hidden', s.id !== 's-' + id));
+    const el = $('s-' + id); if (el && was !== id) { el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter'); clearTimeout(show.t); show.t = setTimeout(() => el.classList.remove('enter'), 650); }
     current = id; if (id !== 'game') { if (G) G.stop(); $('rotate').classList.add('hidden'); Sound.muffle(false); }
     if (id !== 'ward') Wardrobe.stop();
     if (id === 'title' || id === 'hub' || id === 'log' || id === 'set' || id === 'squad' || id === 'ward' || id === 'endless') Sound.mood('title');
@@ -92,7 +95,7 @@
   /* ---------- Story dialogue ---------- */
   let dlg = null;
   // each speaker's 'talking' blip pitch
-  const VOICE = { juno: 330, brick: 200, tank: 140, rook: 262, lumi: 440, sparky: 560, echo: 392, hollow: 92, kestrel: 350, mimic: 175, ship: 620, wrench: 294, marshal: 220, bubbles: 660, friend: 247, static: 80 };
+  const VOICE = { juno: 330, brick: 200, tank: 140, rook: 262, lumi: 440, sparky: 560, echo: 392, hollow: 92, kestrel: 350, mimic: 175, ship: 620, wrench: 294, marshal: 220, bubbles: 660, friend: 247, static: 80, maestro: 130 };
   function lum(hex) { const n = parseInt(hex.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; }
   function dialog(lines, level, done) {
     if (!lines || !lines.length) { done && done(); return; }
@@ -150,7 +153,7 @@
       const grid = document.createElement('div'); grid.className = 'cards';
       LEVELS.filter(l => l.chapter === ch.id).forEach(l => {
         const ok = unlocked(l.id), st = save.stars[l.id] || 0, b = document.createElement('button');
-        b.className = 'lvl' + (ok ? '' : ' locked'); b.disabled = !ok; b.setAttribute('aria-label', `Mission ${l.id}: ${l.name}${ok ? '' : ' (locked)'}`);
+        b.className = 'lvl' + (ok ? '' : ' locked'); b.style.animationDelay = (0.03 * (l.id % 6)) + 's'; b.disabled = !ok; b.setAttribute('aria-label', `Mission ${l.id}: ${l.name}${ok ? '' : ' (locked)'}`);
         if (ok && !st && !nextMarked) { b.classList.add('next'); nextMarked = true; }
         const thumb = renderBoard(l, 22); thumb.style.width = '100%'; thumb.style.height = '118px';
         b.appendChild(thumb);
@@ -185,7 +188,7 @@
         const c = document.createElement('canvas'); e.appendChild(c); paints.push([c, k]);
         e.insertAdjacentHTML('beforeend', open ? `<div><h4>${b.name}</h4><div class="role">${b.role}</div><p>${b.blurb}</p>
           <div class="stats"><span>LV ${crewLevel(k)}</span><span>HP ${b.hp}</span><span>${b.heal ? 'HEAL ' + b.heal : b.repair ? 'REPAIR ' + b.repair : b.shields ? 'SHIELDS' : 'ATK ' + b.atk}</span><span>${b.block ? 'BLOCKS ' + b.block : 'RANGE ' + b.range}</span><span>DEF ${b.def}</span><span>COST ${b.cost}</span></div>
-          <p><b>Skill — ${b.skill.name}:</b> ${b.skill.desc}</p></div>` : `<div><h4>???</h4><p>Reach a later mission to wake this crewmate.</p></div>`);
+          <p><b>Skill — ${b.skill.name}:</b> ${b.skill.desc}</p>${combosFor(k).map(cb => `<p class="combo-line" style="--cc:${cb.color}"><b>${cb.icon} ${cb.name}</b> (with ${CREW[cb.pair[0] === k ? cb.pair[1] : cb.pair[0]].name}): ${cb.desc}</p>`).join('')}</div>` : `<div><h4>???</h4><p>Reach a later mission to wake this crewmate.</p></div>`);
         list.appendChild(e);
       });
     } else if (logTab === 'medals') {
@@ -419,6 +422,8 @@
       box.querySelectorAll('.pick').forEach(b => { const k = b.dataset.k, on = squad.includes(k); b.classList.toggle('on', on); b.classList.toggle('off', (!on && squad.length >= size) || benched(k)); b.classList.toggle('bench', benched(k)); b.setAttribute('aria-pressed', on); });
       $('sqCount').innerHTML = pick ? `<b>${squad.length}</b> / ${size} seats` : chosenMods.length ? `<b>${chosenMods.length}</b> challenge${chosenMods.length > 1 ? 's' : ''} on` : '';
       $('sqGo').disabled = pick && !squad.length;
+      const team = pick ? squad : lvl.crew.filter(k => !benched(k)), cbs = COMBOS.filter(cb => cb.pair.every(k => team.includes(k)));
+      $('sqCombos').innerHTML = cbs.length ? `<b>Combos in this squad</b> <small>(stand them within 2 tiles)</small>` + cbs.map(cb => `<span class="combo-chip" style="--cc:${cb.color}" title="${cb.desc}">${cb.icon} ${cb.name}<small>${CREW[cb.pair[0]].name} + ${CREW[cb.pair[1]].name}</small></span>`).join('') : '';
     };
     if (pick) lvl.crew.forEach(k => {
       const b = CREW[k], el = document.createElement('button'); el.className = 'pick'; el.dataset.k = k;
@@ -585,7 +590,15 @@
         case 'final-kill': showBanner('ALL CLEAR!', '', false); break;
         case 'drill': tip('It drilled underground — wait for it to surface!'); buzz(80); break;
         case 'build': if (!save.coach.build) { save.coach.build = true; radio('wrench', 'Barricade up! It holds back two foes. I’ll keep patching it — you keep me alive!', 7000); } break;
-        case 'boss-call': tip('The Hollow calls for backup!'); break;
+        case 'boss-call': tip(d.name + ' calls for backup!'); break;
+        case 'song': tip(SONGS[d].tip); buzz(40); break;
+        case 'combo': {
+          bump('combos'); if (new Set(G.links.map(l => l.cb.id)).size >= 3) save.flags.team = true;
+          const ck = 'combo_' + d.cb.id;
+          if (!save.coach[ck] && !tut) { save.coach[ck] = true; persist(); clearTimeout(radioPend); radio(d.cb.pair[0], `${d.cb.icon} COMBO — ${d.cb.name}! ${d.cb.desc}`, 7500); }
+          else tip(`${d.cb.icon} Combo: ${d.cb.name}!`);
+          break;
+        }
         case 'door': bump('doors'); if (!save.coach.door) { save.coach.door = true; persist(); if (G.hint && G.doorAt(G.hint[0], G.hint[1])) G.hint = null; } break;
         case 'door-smash': tip('Bosses smash right through doors!'); buzz(90); break;
         case 'sabotage': {
@@ -777,7 +790,7 @@
     if (lvl.id >= 4 && G.deployed <= 4) save.flags.minimal = true;
     if (chosenMods.length >= 3) save.flags.dare = true;
     if (save.diff === 'impostor' && lvl.chapter >= 3) save.flags.imp = true;
-    if (lvl.finale) save.flags.ch3 = true; if (lvl.finale2) save.flags.ch4 = true;
+    if (lvl.finale) save.flags.ch3 = true; if (lvl.finale2) save.flags.ch4 = true; if (lvl.finale3) save.flags.ch5 = true;
     const xp = awardXP(XP_GAIN.win + XP_GAIN.star * r.stars); persist();
     const medals = checkMedals(true); buzz([60, 40, 60, 40, 140]);
     const newLooks = Object.values(LOOKS).flat().filter(i => (i.stars > 0 || i.bolts) && lookOpen(i, totalStars(), totalBolts()) && !lookOpen(i, before, boltsBefore));
@@ -797,6 +810,7 @@
   function afterStory() {
     if (lvl.finale && !save.epilogue) { save.epilogue = true; persist(); cinematic(EPILOGUE, toHub); }
     else if (lvl.finale2 && !save.epilogue2) { save.epilogue2 = true; persist(); cinematic(EPILOGUE2, toHub); }
+    else if (lvl.finale3 && !save.epilogue3) { save.epilogue3 = true; persist(); cinematic(EPILOGUE3, toHub); }
     else toHub();
   }
 

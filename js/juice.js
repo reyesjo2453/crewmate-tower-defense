@@ -15,7 +15,8 @@ const JUICE = { calm: false, nums: true };
 const FOE_TINT = {
   crawler: '#6b4a8a', mimic: '#3a2f48', ghost: '#bfe8ff', drone: '#a6b4c8', shifter: '#8a35c8', plated: '#4a4258',
   spore: '#b042e8', sporelet: '#d07af0', brute: '#3b2f4a', sporemother: '#7a2bb8', heart: '#c06bff', mite: '#8a6a52',
-  leech: '#2f8f6a', golem: '#5d5048', bomber: '#ffa63d', foreman: '#d98a1f'
+  leech: '#2f8f6a', golem: '#5d5048', bomber: '#ffa63d', foreman: '#d98a1f',
+  mender: '#e8f7d8', warden: '#46557e', rally: '#ff6fb5', conductor: '#9ab8ff'
 };
 const jr = (a, b) => a + Math.random() * (b - a);
 
@@ -144,7 +145,11 @@ class Juice {
   promote(c) { c.jPromo = this.g.t; this.twinkle(c.cx, c.cy - 20, '#ffd84a', 10, 26); }
   heal(c) { this.twinkle(c.cx, c.cy - 26, '#7dff9c', 2, 14); }
   skill(c) { c.jSkill = this.g.t; this.freeze(0.06, true); this.screen('255,240,150', 0.14); this.twinkle(c.cx, c.cy - 20, '#fff7a8', 12, 34); }
-  build(w) { this.dust(w.cx, w.cy + 24, 8, '200,152,88'); }
+  combo(l) { // sparkles run along the new link, and both partners hop
+    const n = 8; for (let i = 0; i <= n; i++) this.twinkle(l.a.cx + (l.b.cx - l.a.cx) * i / n, l.a.cy + 10 + (l.b.cy - l.a.cy) * i / n, l.cb.color, 1, 8);
+    l.a.jPromo = l.b.jPromo = this.g.t;
+  }
+    build(w) { this.dust(w.cx, w.cy + 24, 8, '200,152,88'); }
   door(d) { this.dust((d.x + 0.5) * TILE, (d.y + 0.5) * TILE + 20, 10, '255,216,74'); }
   bossIn(f) { this.punch(f.x, f.y, 1.08, 0.7); }
   final() {

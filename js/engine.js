@@ -49,6 +49,8 @@ class Game {
     this.speed = 1; this.paused = false; this.raf = 0; this.last = 0; this.acc = 0; this.clock = 0;
     // cosmetic game-feel layer (only with a canvas, so headless runs stay bare)
     this.J = canvas && typeof Juice !== 'undefined' ? new Juice(this) : null;
+    // cosmetic lighting & ambient scenery (same rules as juice: canvas only, never the battle rng)
+    this.S = canvas && typeof Scene !== 'undefined' ? new Scene(this) : null;
   }
   emit(n, d, e) { if (this.hooks.emit) this.hooks.emit(n, d, e); }
   /** a sound effect, panned left/right by where it happens on the board */
@@ -76,7 +78,9 @@ class Game {
     this.avail = (opts.squad && opts.squad.length ? opts.squad.filter(k => level.crew.includes(k)) : level.crew).slice(); this.deployed = 0; this.rng = mulberry32(level.id * 31 + 7);
     if (this.mods.has('nomed')) this.avail = this.avail.filter(k => !CREW[k].heal && !CREW[k].shields);
     this.setupDoors(); this.sabo = null; this.saboQ = []; this.darkA = 0; this.saboCount = 0; this.doorUses = 0;
+    this.links = []; this.comboKeys = new Set(); this.comboDirty = true; this.combosMade = 0; this.maxCombos = 0;
     if (this.J) this.J.reset();
+    if (this.S) this.S.reset();
     this.board = null; if (this.cv) this.resize(this.cssW || 800, this.cssH || 480);
     this.emit('start', level);
   }
@@ -87,6 +91,7 @@ class Game {
       this.raf = requestAnimationFrame(loop);
       const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now; this.clock += dt;
       if (this.J) this.J.step(dt);
+      if (this.S) this.S.step(dt);
       if (this.J && this.J.hs > 0) this.acc = 0; // hit-pause: hold the next step for a beat
       else if (!this.paused && this.state !== 'won' && this.state !== 'lost' && !this.frozen) {
         this.acc += dt * this.speed * this.timeScale;
@@ -106,6 +111,7 @@ class Game {
     this.cv.style.width = cw + 'px'; this.cv.style.height = ch + 'px';
     this.cv.width = Math.round(cw * this.dpr); this.cv.height = Math.round(ch * this.dpr);
     this.board = renderBoard(this.level, TILE * sc * this.dpr);
+    if (this.S) this.S.setBoard(this.board);
     this.emit('resize', { cw, ch });
   }
 
@@ -189,21 +195,61 @@ class Game {
     const k = keyOf(x, y); return this.pathSet.has(k) ? 'path' : this.highSet.has(k) ? 'high' : 'none';
   }
   up(type) { return this.ups[type] || {}; }
+  /** combo multipliers for a crewmate (or barricade): { atk, def, interval, heal, aoe, sp, hp } */
+  comboMul(c) {
+    const src = c.barricade ? c.owner : c, key = c.barricade ? 'barricade' : c.type, m = { atk: 1, def: 1, interval: 1, heal: 1, aoe: 1, sp: 1, hp: 1 };
+    if (!src.combos || !src.combos.size) return m;
+    for (const cb of COMBOS) { const fx = src.combos.has(cb.id) && cb.fx[key]; if (fx) for (const k in fx) m[k] *= fx[k]; }
+    return m;
+  }
   stat(c) {
+    const m = this.comboMul(c);
     if (c.barricade) { // scales with its Wrench
       const o = c.owner, u = this.up('wrench'), steel = o.skillT > 0;
-      return { maxHp: Math.round(BARRICADE.hp * (1 + 0.3 * o.lv) * (1 + 0.1 * (u.tough || 0))), atk: 0, def: BARRICADE.def * (steel ? 2 : 1), interval: 1, heal: 0, block: steel ? 3 : BARRICADE.block };
+      return { maxHp: Math.round(BARRICADE.hp * (1 + 0.3 * o.lv) * (1 + 0.1 * (u.tough || 0)) * m.hp), atk: 0, def: BARRICADE.def * (steel ? 2 : 1), interval: 1, heal: 0, block: steel ? 3 : BARRICADE.block, sp: 1, aoe: 0 };
     }
     const b = c.b, lv = c.lv, skill = c.skillT > 0, u = this.up(c.type), pw = 1 + 0.08 * (u.power || 0);
     return {
-      maxHp: Math.round(b.hp * (1 + 0.3 * lv) * (1 + 0.1 * (u.tough || 0))),
-      atk: b.atk * (1 + 0.28 * lv) * pw * (c.type === 'brick' && skill ? 1.8 : 1),
-      def: b.def * (c.type === 'tank' && skill ? 2 : 1),
-      interval: b.interval * (c.type === 'rook' && skill ? 0.5 : 1) * (c.type === 'marshal' && skill ? 1 / 3 : 1),
-      heal: (b.heal || 0) * (1 + 0.3 * lv) * pw,
+      maxHp: Math.round(b.hp * (1 + 0.3 * lv) * (1 + 0.1 * (u.tough || 0)) * m.hp),
+      atk: b.atk * (1 + 0.28 * lv) * pw * (c.type === 'brick' && skill ? 1.8 : 1) * m.atk,
+      def: b.def * (c.type === 'tank' && skill ? 2 : 1) * m.def,
+      interval: b.interval * (c.type === 'rook' && skill ? 0.5 : 1) * (c.type === 'marshal' && skill ? 1 / 3 : 1) * m.interval,
+      heal: (b.heal || 0) * (1 + 0.3 * lv) * pw * m.heal,
       repair: (b.repair || 0) * (1 + 0.3 * lv) * pw,
-      block: b.block
+      block: b.block, sp: m.sp, aoe: (b.aoe || 0) * m.aoe
     };
+  }
+  /** who is teamed up with whom: recomputed whenever the crew changes */
+  updateCombos() {
+    this.comboDirty = false;
+    const crew = this.crew.filter(c => !c.barricade), R2 = COMBO_RANGE * COMBO_RANGE + 1e-6, links = [];
+    crew.forEach(c => { c.combos = new Set(); });
+    for (const cb of COMBOS) {
+      const [ta, tb] = cb.pair;
+      for (const a of crew) {
+        if (a.type !== ta) continue;
+        let best = null, bd = R2;
+        for (const b of crew) { if (b.type !== tb) continue; const d = (a.x - b.x) ** 2 + (a.y - b.y) ** 2; if (d <= bd) { bd = d; best = b; } }
+        if (best) { a.combos.add(cb.id); best.combos.add(cb.id); links.push({ a, b: best, cb, key: cb.id + ':' + a.id + ':' + best.id }); }
+      }
+    }
+    const now = new Set(links.map(l => l.key));
+    for (const l of links) if (!this.comboKeys.has(l.key)) {
+      this.combosMade++; this.sfx('combo', (l.a.cx + l.b.cx) / 2); this.emit('combo', l); if (this.J) this.J.combo(l);
+    }
+    this.comboKeys = now; this.links = links;
+    this.maxCombos = Math.max(this.maxCombos, new Set(links.map(l => l.cb.id)).size);
+    for (const c of this.crew) { const mx = this.stat(c).maxHp; if (c.hp > mx) c.hp = mx; }
+  }
+  /** combos a crewmate of `type` would join if placed at tile (x, y) */
+  combosAt(type, x, y) {
+    const out = [];
+    for (const cb of combosFor(type)) {
+      const other = cb.pair[0] === type ? cb.pair[1] : cb.pair[0];
+      const mate = this.crew.find(c => !c.barricade && c.type === other && (c.x - x) ** 2 + (c.y - y) ** 2 <= COMBO_RANGE * COMBO_RANGE + 1e-6);
+      if (mate) out.push({ cb, mate });
+    }
+    return out;
   }
   spMaxOf(type) { return CREW[type].skill.sp * (1 - 0.1 * (this.up(type).focus || 0)); }
   promoteCost(c) { return c.lv >= PROMOTE_MAX ? null : Math.ceil(c.b.cost * (c.lv === 0 ? 0.8 : 1.2)); }
@@ -232,7 +278,7 @@ class Game {
     const b = CREW[type];
     this.dp -= b.cost;
     const c = { id: this.uid++, type, b, x, y, cx: (x + 0.5) * TILE, cy: (y + 0.5) * TILE, lv: 0, hp: b.hp, sp: 0, spMax: this.spMaxOf(type), skillT: 0, shield: 0, buildT: BARRICADE.buildT, blocking: [], atkT: 0.35, facing: 1, flash: 0, spent: b.cost, born: this.t, ready: false };
-    c.hp = this.stat(c).maxHp; this.crew.push(c); this.deployed++;
+    c.combos = new Set(); c.hp = this.stat(c).maxHp; this.crew.push(c); this.deployed++; this.comboDirty = true;
     this.puff(c.cx, c.cy + 10, b.color, 8); this.ring(c.cx, c.cy, 10, 40, b.color, 0.45);
     this.emit('deploy', c); this.sfx('deploy', c.cx); if (this.J) this.J.deploy(c);
     return c;
@@ -251,7 +297,7 @@ class Game {
   }
   removeCrew(c, died) {
     c.blocking.forEach(f => { f.blockedBy = null; }); c.blocking = [];
-    this.crew = this.crew.filter(k => k !== c);
+    this.crew = this.crew.filter(k => k !== c); this.comboDirty = true;
     this.puff(c.cx, c.cy, c.b.color, 10);
     if (c.barricade) { c.owner.wall = null; c.owner.buildT = BARRICADE.rebuildT; if (died) { this.puff(c.cx, c.cy - 10, '#c89858', 12); this.sfx('boom', c.cx); } return; }
     if (c.wall) this.removeCrew(c.wall, false);
@@ -319,7 +365,8 @@ class Game {
       id: this.uid++, type, def, route: routeIdx, r, d: d0 || 0, hp, maxHp: hp, atk: def.atk * this.diff.atk, spd: def.spd,
       slowT: 0, slowMul: 1, blockedBy: null, atkT: 0.3, revealed: !def.stealth, seenT: 0, flash: 0, facing: 1, seed: this.uid % 4,
       air: !!(def.flying || r.air), phase: 0, summonT: def.summon ? def.summon.every : 0, x: 0, y: 0, born: this.t,
-      under: false, burT: def.burrow ? def.burrow.up * (0.6 + 0.4 * ((this.uid % 5) / 5)) : 0, drillT: def.drill ? def.drill.every : 0
+      under: false, burT: def.burrow ? def.burrow.up * (0.6 + 0.4 * ((this.uid % 5) / 5)) : 0, drillT: def.drill ? def.drill.every : 0,
+      wardK: 1, hasteK: 1, mendT: 0, pulseT: 0, songT: def.songs ? def.songs.every : 0, songI: 0, song: def.songs ? def.songs.list[0] : null
     };
     const p = posAt(r, f.d); f.x = p.x * TILE; f.y = p.y * TILE; this.foes.push(f);
     if (def.boss) { this.emit('boss', def); this.emit('sfx', 'boss'); if (this.J) this.J.bossIn(f); }
@@ -329,7 +376,7 @@ class Game {
   /* ---------- damage ---------- */
   hitFoe(f, amount, elec, pierce) {
     if (f.dead) return;
-    const dmg = elec ? amount : Math.max(amount - f.def.def * (pierce ? 0.5 : 1), amount * 0.25);
+    const dmg = (elec ? amount : Math.max(amount - f.def.def * (pierce ? 0.5 : 1), amount * 0.25)) * (f.wardK || 1);
     f.hp -= dmg; f.flash = 0.12; if (this.J) this.J.hitFoe(f, dmg, elec, pierce);
     const def = f.def;
     if (def.boss && dmg > f.maxHp * 0.012) this.shake = Math.max(this.shake, 0.14);
@@ -337,7 +384,8 @@ class Game {
       const frac = f.hp / f.maxHp;
       while (f.phase < def.phases.length && frac <= def.phases[f.phase].at) {
         const [type, n, gap] = def.phases[f.phase].spawn; f.phase++;
-        for (let i = 0; i < n; i++) this.queue.push({ time: this.t + 0.6 + i * gap, type, route: type === 'ghost' ? Math.max(1, this.routes.findIndex(r => r.air)) : f.route, d: Math.max(0, f.d - 0.3) });
+        const air = this.routes.findIndex(r => r.air), fly = FOES[type].flying && air >= 0;
+        for (let i = 0; i < n; i++) this.queue.push({ time: this.t + 0.6 + i * gap, type, route: fly ? air : f.route, d: fly ? 0 : Math.max(0, f.d - 0.3) });
         this.queue.sort((a, b) => a.time - b.time);
         this.ring(f.x, f.y - 40, 20, 220, '#d58bff', 0.9); this.emit('boss-call', def); this.emit('sfx', 'boss');
       }
@@ -373,6 +421,7 @@ class Game {
   /* ---------- simulation ---------- */
   update(dt) {
     this.t += dt;
+    if (this.comboDirty) this.updateCombos();
     if (this.state === 'prep') return;
     let drain = 0; for (const f of this.foes) if (f.def.drain) drain += f.def.drain;
     this.dp = Math.max(0, Math.min(this.dpMax, this.dp + ((this.sabo && this.sabo.kind === 'o2' ? -0.4 : this.dpRate) - drain) * dt));
@@ -380,6 +429,7 @@ class Game {
     // wave timers
     while (this.queue.length && this.queue[0].time <= this.t) { const q = this.queue.shift(); this.spawnFoe(q.type, q.route, q.d || 0, q.mul); }
     if (this.autoWaves && this.waveIdx >= 0 && this.waveIdx < this.level.waves.length - 1 && this.t - this.waveStart >= this.level.waves[this.waveIdx].dur) this.startWave();
+    this.updateAuras(dt);
     for (const c of this.crew.slice()) this.updateCrew(c, dt);
     for (const f of this.foes.slice()) { if (!f.dead) this.updateFoe(f, dt); }
     this.updateShots(dt);
@@ -393,6 +443,27 @@ class Game {
       this.state = 'won'; this.sabo = null; this.saboQ = [];
       const ratio = this.lives / this.maxLives, stars = ratio >= 0.7 ? 3 : ratio >= 0.35 ? 2 : 1;
       this.emit('sfx', 'win'); this.emit('end', { won: true, stars, lives: this.lives });
+    }
+  }
+  /** foes that help each other: Menders heal, Wardens shield, Cheer Drones speed up, the Conductor sings all three */
+  auraOf(a) {
+    const d = a.def;
+    if (d.songs) { const s = d.songs, r = s.r; return a.song === 'haste' ? { rally: { r, boost: s.boost } } : a.song === 'mend' ? { mend: { r, hps: s.hps } } : { ward: { r, cut: s.cut } }; }
+    return d.mend || d.ward || d.rally ? { mend: d.mend, ward: d.ward, rally: d.rally } : null;
+  }
+  updateAuras(dt) {
+    const fs = this.foes; for (const f of fs) { f.wardK = 1; f.hasteK = 1; }
+    for (const a of fs) {
+      if (a.under) continue; const au = this.auraOf(a); if (!au) continue;
+      a.pulseT -= dt; const pulse = a.pulseT <= 0; if (pulse) a.pulseT = 1.4;
+      const k = au.mend || au.ward || au.rally, R2 = (k.r * TILE) ** 2;
+      if (pulse) this.fx.push({ k: 'ring', x: a.x, y: a.y - 16, r0: 8, r1: k.r * TILE, color: au.mend ? '#7dff9c' : au.ward ? '#5ab8ff' : '#ff7a8a', life: 0.7, age: 0, dim: true });
+      for (const f of fs) {
+        if (f === a || f.under || dist2(f.x, f.y, a.x, a.y) > R2) continue;
+        if (au.ward) f.wardK = Math.min(f.wardK, 1 - au.ward.cut);
+        if (au.rally) f.hasteK = Math.max(f.hasteK, au.rally.boost);
+        if (au.mend && f.hp < f.maxHp) { f.hp = Math.min(f.maxHp, f.hp + au.mend.hps * this.diff.hp * this.hpMul * dt); f.mendT = 0.3; }
+      }
     }
   }
   visible(f) { return !f.under && (!f.def.stealth || f.revealed || f.seenT > 0); }
@@ -416,6 +487,11 @@ class Game {
         if (f.under) { this.release(f); this.shake = Math.max(this.shake, 0.35); this.emit('sfx', 'drill'); this.emit('drill', f); } else { this.ring(f.x, f.y, 10, 120, '#ffa63d', 0.6); this.puff(f.x, f.y, '#7a644c', 16); this.shake = 0.4; }
       }
     }
+    if (def.songs) {
+      f.songT -= dt;
+      if (f.songT <= 0) { f.songT = def.songs.every; f.songI++; f.song = def.songs.list[f.songI % def.songs.list.length]; f.pulseT = 0; this.ring(f.x, f.y - 50, 20, def.songs.r * TILE, SONGS[f.song].color, 0.9); this.sfx('song', f.x); this.emit('song', f.song); }
+    }
+    f.mendT = Math.max(0, f.mendT - dt);
     if (def.summon) { f.summonT -= dt; if (f.summonT <= 0) { f.summonT = def.summon.every; for (let i = 0; i < def.summon.n; i++) this.spawnFoe(def.summon.type, f.route, Math.max(0, f.d - 0.2 * i)); this.ring(f.x, f.y - 20, 10, 90, '#c06bff', 0.5); } }
     if (!f.revealed && !f.under) for (const c of this.crew) if (dist2(c.cx, c.cy, f.x, f.y) < (TILE * 1.3) * (TILE * 1.3)) { f.revealed = true; this.ring(f.x, f.y - 20, 8, 60, '#d6f', 0.4); break; }
     // blocked: fight the blocker (Blast Beetles go boom instead)
@@ -432,7 +508,7 @@ class Game {
       if (best) { // strafes: keeps creeping forward at 35% speed while shooting, so it can never stall a wave
         f.atkT -= dt; f.facing = best.cx >= f.x ? 1 : -1;
         if (f.atkT <= 0) { f.atkT = def.interval; this.hitCrew(best, f.atk); this.fx.push({ k: 'line', x1: f.x, y1: f.y - 36, x2: best.cx, y2: best.cy - 24, color: '#ff4d6a', life: 0.14, age: 0 }); }
-        f.d += def.spd * 0.35 * f.slowMul * dt;
+        f.d += def.spd * 0.35 * f.slowMul * (f.hasteK || 1) * dt;
         if (f.d >= f.r.len) { this.leak(f); return; }
         const q = posAt(f.r, f.d); f.x = q.x * TILE; f.y = q.y * TILE;
         return;
@@ -440,7 +516,7 @@ class Game {
     }
     // move (shut doors hold walking foes back; bosses smash them open)
     const spd = f.under && def.drill ? def.drill.spd : def.spd * (f.under ? 1.15 : 1);
-    let nd = f.d + spd * this.spdMul * f.slowMul * dt;
+    let nd = f.d + spd * this.spdMul * f.slowMul * (f.hasteK || 1) * dt;
     if (!f.air && !f.under && f.r.doorStops) for (const st of f.r.doorStops) {
       if (st.door.t <= 0 || f.d > st.d + 0.01 || nd <= st.d) continue;
       if (def.boss) { st.door.t = 0; this.shake = 0.4; this.puff((st.door.x + 0.5) * TILE, (st.door.y + 0.5) * TILE, '#ffd84a', 12); this.emit('sfx', 'boss'); this.emit('door-smash', st.door); continue; }
@@ -467,7 +543,7 @@ class Game {
   }
 
   updateCrew(c, dt) {
-    const b = c.b, st = this.stat(c); c.flash = Math.max(0, c.flash - dt); c.atkT -= dt;
+    const b = c.b, st = this.stat(c); c.flash = Math.max(0, c.flash - dt); c.atkT -= dt; if (c.fireT > 0) c.fireT -= dt;
     if (c.hp > st.maxHp) c.hp = st.maxHp;
     if (c.barricade) { c.blocking = c.blocking.filter(f => !f.dead && f.blockedBy === c); return; }
     if (b.builds && !c.wall) { c.buildT -= dt; if (c.buildT <= 0) { if (!this.build(c)) c.buildT = 1.5; } }
@@ -475,7 +551,7 @@ class Game {
       c.skillT -= dt; if (c.skillT <= 0) c.skillT = 0;
       if (c.type === 'tank') c.hp = Math.min(st.maxHp, c.hp + 40 * dt);
       if (c.type === 'echo') { const r = this.rangeOf(c) * TILE; for (const f of this.foes) if (!f.under && dist2(f.x, f.y, c.cx, c.cy) <= r * r) { f.slowT = 0.3; f.slowMul = Math.min(f.slowMul, 0.25); f.seenT = 0.4; } }
-    } else if (c.sp < c.spMax) { c.sp = Math.min(c.spMax, c.sp + dt); if (c.sp >= c.spMax) { c.ready = true; this.emit('skill-ready', c); } }
+    } else if (c.sp < c.spMax) { c.sp = Math.min(c.spMax, c.sp + dt * (st.sp || 1)); if (c.sp >= c.spMax) { c.ready = true; this.emit('skill-ready', c); } }
     if (b.reveals) { const r = this.rangeOf(c) * TILE; for (const f of this.foes) if (!f.revealed && dist2(f.x, f.y, c.cx, c.cy) <= r * r) f.seenT = 0.35; }
     if (b.block > 0) { // guards: fight what they block
       c.blocking = c.blocking.filter(f => !f.dead && f.blockedBy === c);
@@ -511,7 +587,7 @@ class Game {
     if (c.type === 'rook') { this.shots.push({ x: c.cx + c.facing * 18, y: c.cy - 28, f: t, dmg: st.atk, speed: 900, color: '#ffe27a' }); this.sfx('shoot', c.cx); if (this.J) this.J.fire(c, false); }
     else if (c.type === 'marshal') { this.shots.push({ x: c.cx + c.facing * 18, y: c.cy - 30, f: t, dmg: st.atk, speed: 1500, color: '#ff9a3d', pierce: true, big: true }); this.sfx('cannon', c.cx); if (this.J) this.J.fire(c, true); this.fx.push({ k: 'ring', x: c.cx + c.facing * 24, y: c.cy - 30, r0: 2, r1: 14, color: '#ffd24a', life: 0.15, age: 0 }); }
     else if (c.type === 'sparky') {
-      const ar = b.aoe * TILE, hit = new Set();
+      const ar = st.aoe * TILE, hit = new Set();
       for (const f of this.foes) if (this.visible(f) && dist2(f.x, f.y, t.x, t.y) <= ar * ar) hit.add(f);
       if (c.skillT > 0) { const near = this.foes.filter(f => !hit.has(f) && this.visible(f) && dist2(f.x, f.y, t.x, t.y) < (TILE * 2.4) ** 2).sort((a, b2) => dist2(a.x, a.y, t.x, t.y) - dist2(b2.x, b2.y, t.x, t.y)).slice(0, 4); let prev = t; near.forEach(f => { this.bolt(prev.x, prev.y - 24, f.x, f.y - 24, '#9ff', 0.28); hit.add(f); prev = f; }); }
       this.bolt(c.cx, c.cy - 40, t.x, t.y - 24); this.ring(t.x, t.y - 10, 6, ar, '#fff48a', 0.3);
@@ -618,9 +694,25 @@ class Game {
         ctx.strokeStyle = kind === 'path' ? '#ffd640' : '#50e6ff'; ctx.lineWidth = 2.5; ctx.strokeRect(x * TILE + 4, y * TILE + 4, TILE - 8, TILE - 8);
       }
       if (this.hover && this.tileKind(this.hover[0], this.hover[1]) === kind) this.drawRange(this.hover[0], this.hover[1], this.placing);
+      // combo preview: tiles where the new crewmate would team up show the combo's icon (and a link while hovering)
+      if (combosFor(this.placing).length) {
+        ctx.font = '15px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        for (let y = 0; y < this.rows; y++) for (let x = 0; x < this.cols; x++) {
+          if (this.tileKind(x, y) !== kind || this.crewAt(x, y) || this.doorAt(x, y)) continue;
+          const cs = this.combosAt(this.placing, x, y); if (!cs.length) continue;
+          const hov = this.hover && this.hover[0] === x && this.hover[1] === y, bx = x * TILE + TILE - 14, by = y * TILE + 14;
+          ctx.fillStyle = 'rgba(10,12,24,.8)'; ctx.beginPath(); ctx.arc(bx, by, 11, 0, 6.3); ctx.fill(); ctx.strokeStyle = cs[0].cb.color; ctx.lineWidth = 2; ctx.stroke();
+          ctx.fillStyle = '#fff'; ctx.fillText(cs[0].cb.icon, bx, by + 1);
+          if (hov) cs.forEach(({ cb, mate }) => this.drawLink(ctx, (x + 0.5) * TILE, (y + 0.5) * TILE + 20, mate.cx, mate.cy + 20, cb, T_, true));
+        }
+      }
     }
     if (this.hint) { const [hx, hy] = this.hint, p = 0.5 + 0.5 * Math.sin(T_ * 7); ctx.strokeStyle = `rgba(255,255,255,${0.6 + 0.4 * p})`; ctx.lineWidth = 4; ctx.strokeRect(hx * TILE + 2, hy * TILE + 2, TILE - 4, TILE - 4); ctx.fillStyle = `rgba(255,255,120,${0.15 + 0.2 * p})`; ctx.fillRect(hx * TILE + 2, hy * TILE + 2, TILE - 4, TILE - 4); }
     if (this.selected) this.drawRange(this.selected.x, this.selected.y, this.selected.type, true);
+    for (const l of this.links) this.drawLink(ctx, l.a.cx, l.a.cy + 20, l.b.cx, l.b.cy + 20, l.cb, T_, false);
+    if (this.S) this.S.drawBack(ctx, T_);
+    // foe auras on the floor (Warden shields, Mender dust, Cheer Drone beats, the Conductor's song)
+    for (const f of this.foes) { const au = !f.under && this.auraOf(f); if (au) drawAura(ctx, f.x, f.y + (f.air ? 6 : 24), (au.mend || au.ward || au.rally).r * TILE, au.mend ? '125,255,156' : au.ward ? '90,184,255' : '255,110,130', T_ + f.id, f.def.boss); }
     // entities, painter-sorted
     const list = [];
     this.crew.forEach(c => list.push({ y: c.cy, c })); this.foes.forEach(f => { if (!f.air) list.push({ y: f.y, f }); });
@@ -632,12 +724,13 @@ class Game {
     // fx
     for (const e of this.fx) this.drawFx(ctx, e);
     if (J) J.draw(ctx);
-    if (this.darkA > 0.02) this.drawDark(ctx);
+    if (this.S) this.S.drawLight(ctx, T_); else if (this.darkA > 0.02) this.drawDark(ctx);
     if (this.sabo) { const s = this.sabo; s.panels.forEach(p => drawPanel(ctx, p.x * TILE, p.y * TILE, s.def.color, s.def.icon, p.taps / s.need, p.taps >= s.need, T_)); }
     // overhead bars on top
     this.foes.forEach(f => this.drawFoeBar(ctx, f));
     this.crew.forEach(c => this.drawCrewBar(ctx, c, T_));
     if (J) J.drawNums(ctx);
+    if (this.S) this.S.drawTop(ctx);
     if (this.sabo) this.drawAlarm(ctx, T_);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (J) J.drawScreen(ctx, this.cv.width, this.cv.height);
@@ -671,6 +764,16 @@ class Game {
     ctx.fillStyle = s.def.color; ctx.fillRect(x - tw / 2 + 10, y + 11, (tw - 20) * Math.max(0, s.t / s.dur), 3);
     ctx.fillStyle = '#fff'; ctx.fillText(txt, x, y - 1);
   }
+  drawLink(ctx, x1, y1, x2, y2, cb, T_, preview) {
+    const p = 0.5 + 0.5 * Math.sin(T_ * 4);
+    ctx.save(); ctx.strokeStyle = cb.color; ctx.globalAlpha = preview ? 0.9 : 0.45 + 0.25 * p; ctx.lineWidth = preview ? 4 : 3; ctx.lineCap = 'round';
+    ctx.setLineDash([2, 9]); ctx.lineDashOffset = -T_ * 30; ctx.shadowColor = cb.color; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.setLineDash([]);
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - 4; ctx.shadowBlur = 0; ctx.globalAlpha = preview ? 1 : 0.85;
+    ctx.fillStyle = 'rgba(10,12,24,.82)'; ctx.beginPath(); ctx.arc(mx, my, 10 + p, 0, 6.3); ctx.fill(); ctx.strokeStyle = cb.color; ctx.lineWidth = 2; ctx.stroke();
+    ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText(cb.icon, mx, my + 1);
+    ctx.restore();
+  }
   drawRange(tx, ty, type, sel) {
     const b = CREW[type], ctx = this.ctx, cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE, dim = this.rangeOf({ b }) / (b.range || 1);
     if (b.block > 0) { ctx.strokeStyle = '#ffd640'; ctx.lineWidth = 3; ctx.setLineDash([6, 6]); ctx.strokeRect(tx * TILE + 3, ty * TILE + 3, TILE - 6, TILE - 6); ctx.setLineDash([]); return; }
@@ -702,8 +805,9 @@ class Game {
     if (f.under) { drawMound(ctx, f.x, f.y + 24, 62 * f.def.size * (f.def.boss ? 1.3 : 1), T_ + f.id); return; }
     const s = 62 * f.def.size, fx = f.slowT > 0 ? '#9ff' : null, feet = f.y + (f.air ? 6 : 24);
     if (this.J) { const [px, py, ox, rot] = this.J.foePose(f); ctx.save(); ctx.translate(f.x + ox, feet); ctx.rotate(rot); ctx.scale(px, py); ctx.translate(-f.x, -feet); }
-    drawFoe(ctx, f.type, f.x, feet, s, { t: T_ + f.id, facing: f.facing, revealed: f.revealed || f.seenT > 0, seed: f.seed, flash: f.flash > 0 ? 1 : 0 });
+    drawFoe(ctx, f.type, f.x, feet, s, { t: T_ + f.id, facing: f.facing, revealed: f.revealed || f.seenT > 0, seed: f.seed, flash: f.flash > 0 ? 1 : 0, song: f.song });
     if (this.J) ctx.restore();
+    if (!f.def.stealth || f.revealed || f.seenT > 0) drawBuffs(ctx, f.x, feet, s, f.wardK < 1, f.hasteK > 1, f.mendT > 0, T_ + f.id);
     if (fx) { ctx.strokeStyle = 'rgba(150,240,255,.9)'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.ellipse(f.x, f.y + 26, 20 * f.def.size + 4, 7, 0, 0, 6.3); ctx.stroke(); }
     if (f.def.stealth && !f.revealed && f.seenT <= 0) return;
   }
@@ -711,7 +815,7 @@ class Game {
     if (f.under) return;
     if (f.def.stealth && !f.revealed && f.seenT <= 0) return;
     if (f.hp >= f.maxHp && !f.def.boss) return;
-    const w = f.def.boss ? 74 : 34, y = f.y + (f.air ? -50 : -46) - (f.def.size > 1 ? 28 * (f.def.size - 1) : 0);
+    const w = f.def.boss ? 74 : 34, y = f.def.barY ? Math.max(8, f.y - f.def.barY) : f.y + (f.air ? -50 : -46) - (f.def.size > 1 ? 28 * (f.def.size - 1) : 0);
     ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(f.x - w / 2 - 1, y - 1, w + 2, 7);
     ctx.fillStyle = f.def.boss ? '#c06bff' : '#ff5a6a'; ctx.fillRect(f.x - w / 2, y, w * Math.max(0, f.hp / f.maxHp), 5);
   }

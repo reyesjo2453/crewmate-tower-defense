@@ -10,6 +10,8 @@ The cargo ship **HALCYON** wakes two crew from cryo-sleep to find something craw
 
 **Chapter 4: The Long Way Home** (Missions 11–14) picks up the epilogue's second "hello?". It came from the **Ferrous Deep**, an asteroid mining rig where leftover pieces of the Signal have taken over the machines. The now-friendly Hollow helps the crew gather its lost pieces, three new crewmates join, and the chapter ends with a boss fight against **The Foreman**, the rig's giant drill.
 
+**Chapter 5: The Choir** (Missions 15–18) brings the crew home to **Haven Station**, where the last leftover signals have found each other and formed a choir. They watched the crew work together on the long way home and copied it, but they think teamwork means winning. Menders heal their friends, Wardens shield them and Cheer Drones speed them up. The chapter ends at the top of the broadcast tower against **The Conductor**.
+
 ## How it plays (the Arknights part)
 
 - **Deploy** crewmates from the bar using **DP** (Deployment Points), which refill over time. Cost, timing and placement are the whole game.
@@ -33,7 +35,23 @@ The cargo ship **HALCYON** wakes two crew from cryo-sleep to find something craw
 | Marshal (brown) | Sheriff | huge range, slow shots that pierce half of any armor, always aims at the toughest foe |
 | Bubbles (pink) | Guardian | gives a friend a bubble that soaks one whole hit; skill: Bubble Party shields everyone nearby |
 
-Foes include Vent Crawlers, Mimics, Wisp Ghosts (flying), Sabotage Drones (flying, shoot back), Shapeshifters (stealth), Plated Mimics (armor), Spore Walkers (split when popped) and three bosses. Chapter 4 adds Rock Mites (burrow under guards), Power Leeches (drain DP), Ore Golems (heavy armor, can't be slowed), Blast Beetles (explode on guards) and the boss **The Foreman** (drills underground and calls Rock Mites). A boss's first appearance gets a short intro card. The **Logbook** (title/map screen) lists everyone and what to do about them.
+### Combos
+
+Two crewmates standing within two tiles of each other team up. A glowing dashed link with the combo's icon joins them, and both get a bonus while they stay together:
+
+| Combo | Pair | Bonus |
+| --- | --- | --- |
+| 🤝 Best Buds | Brick + Tank | both get 30% more armor and hit 15% harder |
+| 🎯 Spotter | Echo + Rook | Rook hits 30% harder |
+| 💗 Care Team | Lumi + Bubbles | Lumi heals 30% more, Bubbles shields 30% faster |
+| ✖ Crossfire | Rook + Marshal | both shoot 15% faster |
+| ⚡ Lightning Rod | Sparky + Tank | Sparky's zaps spread 35% wider and hit 10% harder |
+| ⛑ Hard Hats | Wrench + Brick | the barricade gets 40% more health, Brick hits 15% harder |
+| 📡 Static Ping | Sparky + Echo | both skills charge 25% faster |
+
+While you're placing a crewmate, tiles where they would form a combo show its icon (hover with a mouse to preview the link). The first time each combo forms, one of the pair explains it on the radio. The squad screen lists the combos your squad can make, and the Logbook lists each crewmate's partners.
+
+Foes include Vent Crawlers, Mimics, Wisp Ghosts (flying), Sabotage Drones (flying, shoot back), Shapeshifters (stealth), Plated Mimics (armor), Spore Walkers (split when popped) and three bosses. Chapter 4 adds Rock Mites (burrow under guards), Power Leeches (drain DP), Ore Golems (heavy armor, can't be slowed), Blast Beetles (explode on guards) and the boss **The Foreman** (drills underground and calls Rock Mites). Chapter 5's foes help each other: **Mender Moths** heal foes around them, **Wardens** throw a shield over nearby foes so they take about half damage, **Cheer Drones** (flying) make nearby foes run faster, and the boss **The Conductor** switches song every 8 seconds (red: fast, green: healing, blue: shielded) and calls for backup at two-thirds and one-third health. A helped foe shows it: a blue shield outline, red speed lines or green sparkles. A boss's first appearance gets a short intro card. The **Logbook** (title/map screen) lists everyone and what to do about them.
 
 ### Doors and sabotage (from Mission 2)
 
@@ -50,7 +68,7 @@ When a mission has more crew than seats, a **squad screen** comes first: 4 seats
 
 ### Wardrobe
 
-Stars unlock **hats** (10), **visor colours** (5) and **pets** (5) — e.g. Party Hat at 4★, Fix-It Bot at 9★, Crown at 26★. Each crewmate has their own look, shown in battle, on cards and in story scenes. Open it from the mission map or the squad screen; new unlocks get a red dot and a line on the victory screen. Looks are cosmetic only.
+Stars unlock **hats** (10), **visor colours** (5) and **pets** (5) — e.g. Party Hat at 4★, Fix-It Bot at 9★, Crown at 26★. Each crewmate has their own look, shown in battle, on cards and in story scenes. Open it from the mission map or the squad screen; new unlocks get a red dot and a line on the victory screen. Chapter 5 adds the Music Note hat (30★), the Choirling pet (38★) and the Aurora visor (44★). Looks are cosmetic only.
 
 ### Challenges
 
@@ -66,18 +84,21 @@ Crewmates earn **XP** from every mission: 20 for a win plus 10 per star, 8 for a
 
 ### Medals
 
-The Logbook's **Medals** tab tracks 23 goals, such as winning without losing a heart, popping 100 Sporelets, fixing a meltdown with under 5 seconds left, reaching wave 25 in Endless, or training a crewmate to level 5.
+The Logbook's **Medals** tab tracks 27 goals, such as winning without losing a heart, popping 100 Sporelets, fixing a meltdown with under 5 seconds left, reaching wave 25 in Endless, or training a crewmate to level 5.
 
 ### Feel and accessibility
 
 - **Hits that land:** a split-second hit-pause on big blows, knockback, crewmates that drop in and squash on landing, lunge when they attack and bounce when promoted, and foes that squash, flash, then burst into tumbling debris.
 - **Particles:** sparks off every bullet and blade, muzzle flashes, dust when crew land or doors slam, healing twinkles, and fireball blasts.
 - **Damage numbers** pop over foes (hits in quick succession merge into one number; yellow for electric, orange for armour-piercing).
+- **Lighting:** every place has its own darkness between the lights, from bright Medbay to the deep Hollow. The reactor, vents, crewmates, bullets, muzzle flashes, lightning, explosions, skills, glowing foes and glowing decor (consoles, lava, mushrooms, crystals, lamps) light it up in colour. The Meridian's lights flicker. Lights Out uses the same system, so shooters still carry a pool of light the size of their reach.
+- **Living scenery:** drifting dust, snow on Polus, petals on MIRA, glowing spores in the Fungle, static in the Hollow, embers in the Ferrous Deep, fireflies at Haven Station and spark showers from the Meridian's wreckage. Consoles blink, scanners sweep, lava bubbles, fountains splash, Haven's windows shimmer with aurora, and the Hollow's eyes blink and watch the nearest foe.
+- **Transitions:** screens fade and settle in with their contents arriving one after another, mission cards float in, and battles fade up from black.
 - **Camera:** smooth screen shake, a zoom punch when a boss goes down, a slow-motion zoom on the last foe and a burst of confetti on victory, and a red edge flash when the reactor takes a hit.
 - **Voices:** crewmates babble in their own pitch on the radio and shout a battle cry when their skill fires; story characters talk in little voice blips; phones vibrate on big moments.
 - **Options in Settings:** colour-blind friendly highlights (orange stripes for floor tiles, blue dots for decks, blue/orange health bars), bigger buttons, a vibration switch, **Calmer screen** (no hit-pause or zoom, gentle flashes, no shaking) and a damage-numbers switch.
 
-All of this is cosmetic (`js/juice.js`): it never touches the battle's random numbers, and only exists when there is a screen, so automated runs and battle outcomes are exactly the same with or without it.
+All of this is cosmetic (`js/juice.js` and `js/scene.js`): it never touches the battle's random numbers, and only exists when there is a screen, so automated runs and battle outcomes are exactly the same with or without it.
 - **In battle:** a **½×** speed and a **💡 Hint** button that suggests who to place and where (or who to promote).
 
 Mission 1 is a hand-held **tutorial** with Captain Juno (replayable in Settings). After that, the first time each new crewmate joins, they say on the radio where they like to stand, their card glows, and a good tile glows on the map until you place them.
@@ -121,10 +142,11 @@ Progress (stars, bolts, XP and upgrades, medals, Endless bests, unlocks, setting
 - `js/art.js` — Canvas drawing for crewmates, foes and environments
 - `js/engine.js` — simulation + rendering (DOM-free, can run headless)
 - `js/juice.js` — cosmetic game feel: hit-pause, squash & stretch, particles, damage numbers, camera
+- `js/scene.js` — cosmetic lighting, ambient particles and animated decor
 - `js/ui.js` — screens, dialogue, mission briefing (squad and challenges), Endless, crew training and wardrobe, medals, HUD, hints, tutorial, save data
 - `js/audio.js` — synthesized sound & music
 - `sw.js`, `manifest.json`, `icons/` — PWA
-- `tests/` — dev only: `verify.cjs` (data validation, a click-through of the first-play journey, mechanics for every crewmate and foe, challenges, Endless, training, medals, settings, save codes, new-crewmate coaching, game feel & sound, offline), `sim.cjs` + `bot.js` (an automatic player used to tune difficulty)
+- `tests/` — dev only: `verify.cjs` (data validation, a click-through of the first-play journey, mechanics for every crewmate and foe, challenges, Endless, training, medals, settings, save codes, new-crewmate coaching, game feel & sound, combos, helping foes, the Conductor, lighting, Chapter 5, offline), `sim.cjs` + `bot.js` (an automatic player used to tune difficulty)
 
 ## Testing
 
