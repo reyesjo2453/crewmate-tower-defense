@@ -310,7 +310,7 @@ const base = (process.env.BASE_URL || 'http://localhost:8000/').replace(/\/?$/, 
   assert.equal(ch5.songs, 3, 'the Conductor cycles through all three songs');
   assert.ok(ch5.headless && ch5.live, 'lighting only with a canvas');
   const lit = await ui.evaluate(async () => {
-    const g = __t.G; __t.setLevel(LEVELS.find(l => l.id === 15)); __t.beginGame(); g.dp = 99; g.deploy('brick', 4, 3); g.deploy('tank', 4, 4);
+    const g = __t.G; delete __t.save().coach.combo_buds; __t.setLevel(LEVELS.find(l => l.id === 15)); __t.beginGame(); g.dp = 99; g.deploy('brick', 4, 3); g.deploy('tank', 4, 4);
     await new Promise(r => setTimeout(r, 900));
     const out = { spots: g.board.spots.length > 0, lights: g.S.lights(1).length > 3, motes: g.S.p.length > 0, links: g.links.length };
     g.setPlacing('rook'); g.render(); out.radio = !document.getElementById('radio').classList.contains('hidden'); g.setPlacing(null); g.stop();
