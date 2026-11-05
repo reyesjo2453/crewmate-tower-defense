@@ -41,11 +41,14 @@ const base = (process.env.BASE_URL || 'http://localhost:8000/').replace(/\/?$/, 
       (l.doors || []).forEach(d => { const k = d.join(','); if (!path.has(k)) out.push(`L${l.id}: door ${k} not on a floor path`); if (ends.has(k)) out.push(`L${l.id}: door ${k} on a vent or reactor`); });
       Object.entries(l.sabo || {}).forEach(([w, k]) => { if (!SABOTAGE[k]) out.push(`L${l.id}: unknown sabotage ${k}`); if (w < 1 || w > l.waves.length) out.push(`L${l.id}: sabotage on missing wave ${w}`); });
       if (squadSize(l, 'captain') < 1) out.push(`L${l.id}: empty squad`);
+      if (!THEMES[l.theme] || !LIGHT[l.theme]) out.push(`L${l.id}: theme ${l.theme} missing colours or lighting`);
     }
+    COMBOS.forEach(cb => cb.pair.concat(Object.keys(cb.fx)).forEach(k => { if (k !== 'barricade' && !CREW[k]) out.push(`combo ${cb.id}: unknown crew ${k}`); }));
+    Object.keys(FOES).forEach(k => { if (!FOE_TINT[k]) out.push(`foe ${k} has no debris colour`); });
     return out;
   });
   assert.deepEqual(problems, [], problems.join('\n'));
-  const nLevels = await page.evaluate(() => LEVELS.length); assert.equal(nLevels, 14, '14 missions');
+  const nLevels = await page.evaluate(() => LEVELS.length); assert.equal(nLevels, 18, '18 missions');
   console.log('data ok: ' + nLevels + ' levels validated');
 
   // ---- fresh player journey with real clicks
@@ -283,6 +286,42 @@ const base = (process.env.BASE_URL || 'http://localhost:8000/').replace(/\/?$/, 
   assert.deepEqual(feel.silent, [], 'every sound effect renders and is audible');
   assert.ok(await ui.evaluate(() => !!document.getElementById('optCalm') && !!document.getElementById('optNums')), 'settings switches exist');
   console.log('game feel & sound ok');
+
+  // ---- chapter 5: combos, helping foes, the Conductor, lighting & scenery
+  const ch5 = await ui.evaluate(() => {
+    const out = {}, g = new Game(null, { emit() {} }); g.start(LEVELS.find(l => l.id === 15), 'captain', {}); g.dp = 99;
+    const br = g.deploy('brick', 4, 3), tk = g.deploy('tank', 4, 4); g.update(1 / 60);
+    out.buds = g.links.length === 1 && g.links[0].cb.id === 'buds' && g.stat(br).def > CREW.brick.def && g.stat(tk).def > CREW.tank.def;
+    out.preview = g.combosAt('rook', 3, 3).length === 0 && g.combosAt('echo', 3, 3).length === 0;
+    const ro = g.deploy('rook', 3, 3); g.deploy('echo', 2, 3); g.update(1 / 60); out.spotter = g.links.some(l => l.cb.id === 'spotter') && Math.round(g.stat(ro).atk) === Math.round(CREW.rook.atk * 1.3);
+    g.retreat(tk); g.update(1 / 60); out.broken = !g.links.some(l => l.cb.id === 'buds') && g.stat(br).def === CREW.brick.def; out.made = g.combosMade;
+    g.callNextWave(); g.queue = []; g.foes = [];
+    const m = g.spawnFoe('mimic', 0, 0.6), md = g.spawnFoe('mender', 0, 0.7), w = g.spawnFoe('warden', 0, 0.5), r = g.spawnFoe('rally', 1, 0.2), m2 = g.spawnFoe('crawler', 1, 0.3);
+    m.hp -= 100; const h0 = m.hp; for (let i = 0; i < 30; i++) g.updateAuras(1 / 30); out.mend = m.hp > h0 && md.hp === md.maxHp;
+    out.ward = m.wardK < 1 && w.wardK === 1; const hp1 = m.hp; g.hitFoe(m, 100, true); out.wardHit = Math.round(hp1 - m.hp) < 100;
+    out.rally = m2.hasteK > 1;
+    const c = g.spawnFoe('conductor', 0, 0.5), seen = new Set([c.song]); for (let i = 0; i < 60 * 25 && !c.dead; i++) { g.update(1 / 60); seen.add(c.song); } out.songs = seen.size;
+    out.headless = g.S === null; out.live = !!__t.G.S;
+    return out;
+  });
+  assert.ok(ch5.buds, 'Brick + Tank side by side make Best Buds'); assert.ok(ch5.preview, 'no combo shown where there is no partner');
+  assert.ok(ch5.spotter, 'Echo makes Rook hit harder'); assert.ok(ch5.broken, 'combos end when a partner leaves'); assert.equal(ch5.made, 2, 'two combos made');
+  assert.ok(ch5.mend, 'Mender heals others, not itself'); assert.ok(ch5.ward && ch5.wardHit, 'Warden shields others, not itself'); assert.ok(ch5.rally, 'Cheer Drone speeds foes up');
+  assert.equal(ch5.songs, 3, 'the Conductor cycles through all three songs');
+  assert.ok(ch5.headless && ch5.live, 'lighting only with a canvas');
+  const lit = await ui.evaluate(async () => {
+    const g = __t.G; delete __t.save().coach.combo_buds; __t.setLevel(LEVELS.find(l => l.id === 15)); __t.beginGame(); g.dp = 99; g.deploy('brick', 4, 3); g.deploy('tank', 4, 4);
+    await new Promise(r => setTimeout(r, 900));
+    const out = { spots: g.board.spots.length > 0, lights: g.S.lights(1).length > 3, motes: g.S.p.length > 0, links: g.links.length };
+    g.setPlacing('rook'); g.render(); out.radio = !document.getElementById('radio').classList.contains('hidden'); g.setPlacing(null); g.stop();
+    return out;
+  });
+  assert.ok(lit.spots && lit.lights && lit.motes, 'scenery is lit and alive'); assert.equal(lit.links, 1, 'combo shows on the board'); assert.ok(lit.radio, 'first combo is explained on the radio');
+  await ui.evaluate(() => { __t.setLevel(LEVELS.find(l => l.id === 16)); __t.toSquad(); });
+  assert.ok(/Combos in this squad/.test(await ui.textContent('#sqCombos')), 'squad screen lists combos');
+  assert.ok(await ui.evaluate(() => document.querySelector('#s-squad').classList.contains('enter')), 'screens animate in');
+  await ui.evaluate(() => __t.toHub()); assert.ok(/Chapter 5/.test(await ui.textContent('#hubList')), 'chapter 5 on the map');
+  console.log('combos, helping foes, the Conductor, lighting & chapter 5 ok');
 
   // ---- offline PWA
   const pwa = await browser.newContext({ viewport: { width: 900, height: 430 } }); const pp = await pwa.newPage();

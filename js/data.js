@@ -85,6 +85,22 @@ const SHOWME = {
   bubbles: { say: 'Put me on a deck next to your guards! I wrap them in bubbles that block a whole hit!', after: 'Pop! A bubble soaks the next hit — even a beetle’s boom!' }
 };
 const CREW_ORDER = ['brick', 'tank', 'rook', 'lumi', 'sparky', 'echo', 'wrench', 'marshal', 'bubbles'];
+/* ---------- Combos ----------
+   Two crewmates standing within COMBO_RANGE tiles of each other team up for a bonus.
+   fx multiplies stats per crew type (atk, def, interval, heal, aoe, sp = skill charge speed, hp);
+   'barricade' applies to Wrench's barricade while Wrench is in the combo. */
+const COMBO_RANGE = 2.25;
+const COMBOS = [
+  { id: 'buds', pair: ['brick', 'tank'], name: 'Best Buds', icon: '🤝', color: '#ff8a6a', desc: 'Brick and Tank side by side: both get 30% more armor and hit 15% harder.', fx: { brick: { def: 1.3, atk: 1.15 }, tank: { def: 1.3, atk: 1.15 } } },
+  { id: 'spotter', pair: ['echo', 'rook'], name: 'Spotter', icon: '🎯', color: '#7ddcff', desc: 'Echo spots targets for Rook: Rook hits 30% harder.', fx: { rook: { atk: 1.3 } } },
+  { id: 'care', pair: ['lumi', 'bubbles'], name: 'Care Team', icon: '💗', color: '#ff9ad6', desc: 'Lumi heals 30% more and Bubbles blows bubbles 30% faster.', fx: { lumi: { heal: 1.3 }, bubbles: { interval: 0.77 } } },
+  { id: 'crossfire', pair: ['rook', 'marshal'], name: 'Crossfire', icon: '✖', color: '#ffb35a', desc: 'Rook and Marshal both shoot 15% faster.', fx: { rook: { interval: 0.87 }, marshal: { interval: 0.87 } } },
+  { id: 'rod', pair: ['sparky', 'tank'], name: 'Lightning Rod', icon: '⚡', color: '#fff27a', desc: 'Tank holds foes still for Sparky: zaps spread 35% wider and hit 10% harder.', fx: { sparky: { aoe: 1.35, atk: 1.1 } } },
+  { id: 'hardhats', pair: ['wrench', 'brick'], name: 'Hard Hats', icon: '⛑', color: '#ffcc1f', desc: 'Wrench’s barricade gets 40% more health and Brick hits 15% harder.', fx: { brick: { atk: 1.15 }, barricade: { hp: 1.4 } } },
+  { id: 'static', pair: ['sparky', 'echo'], name: 'Static Ping', icon: '📡', color: '#9ffcff', desc: 'Sparky and Echo charge each other up: both skills charge 25% faster.', fx: { sparky: { sp: 1.25 }, echo: { sp: 1.25 } } }
+];
+const combosFor = type => COMBOS.filter(c => c.pair.includes(type));
+
 // Wrench's barricade: a crew-like blocker that lives on a floor tile
 const BARRICADE = { name: 'Barricade', hp: 650, def: 25, block: 2, buildT: 2.5, rebuildT: 7 };
 const PROMOTE_MAX = 2;
@@ -178,7 +194,36 @@ const FOES = {
     drill: { every: 9, dur: 2.4, spd: 1.3 }, summon: { type: 'mite', n: 2, every: 8 },
     lore: 'The rig’s giant drill, wearing the last loud piece of the Signal like a crown.',
     tip: 'BOSS. Drills underground to dodge and calls Rock Mites.'
+  },
+  /* ---- Chapter 5 foes: they help each other ---- */
+  mender: {
+    name: 'Mender Moth', hp: 360, spd: 0.62, atk: 28, interval: 1.2, def: 8, weight: 1, leak: 1, size: 0.8, mend: { r: 1.6, hps: 30 },
+    lore: 'A fuzzy moth that sprinkles glittery dust on its friends. The dust patches them right up.',
+    tip: 'Heals foes around it. Knock it out FIRST!'
+  },
+  warden: {
+    name: 'Warden', hp: 950, spd: 0.4, atk: 70, interval: 1.6, def: 30, weight: 2, leak: 2, size: 1.15, ward: { r: 1.7, cut: 0.45 },
+    lore: 'Carries a lantern that throws a blue shield over everyone nearby. Never over itself, though.',
+    tip: 'Foes near it take about half damage. Take the Warden down, then the rest.'
+  },
+  rally: {
+    name: 'Cheer Drone', hp: 270, spd: 0.8, atk: 0, interval: 1, def: 5, weight: 1, leak: 1, size: 0.75, flying: true, rally: { r: 1.8, boost: 1.4 },
+    lore: 'A party drone blasting music. Everything that hears it starts running to the beat.',
+    tip: 'Flies, and makes nearby foes run faster. Shoot it down; Echo slows them back.'
+  },
+  conductor: {
+    name: 'The Conductor', hp: 10500, spd: 0.25, atk: 170, interval: 2.0, def: 30, weight: 3, leak: 10, size: 1.4, boss: true, barY: 200,
+    songs: { every: 8, r: 3.2, list: ['haste', 'mend', 'ward'], boost: 1.45, hps: 45, cut: 0.45 },
+    phases: [{ at: 0.66, spawn: ['rally', 3, 0.8] }, { at: 0.33, spawn: ['warden', 2, 1.6] }],
+    lore: 'The leftover signals’ choir leader. It waves its baton and every foe nearby plays along.',
+    tip: 'BOSS. Changes song every few seconds: RED = fast, GREEN = healing, BLUE = shielded.'
   }
+};
+// the Conductor's songs: colour + what it does to every foe around it
+const SONGS = {
+  haste: { name: 'Fast Song', color: '#ff5a6a', rgb: '255,90,106', tip: 'RED song — foes run faster! Slow them with Echo, slam a door!' },
+  mend: { name: 'Healing Song', color: '#5af07a', rgb: '90,240,122', tip: 'GREEN song — foes are healing! Hit hard now!' },
+  ward: { name: 'Shield Song', color: '#5ab8ff', rgb: '90,184,255', tip: 'BLUE song — foes are shielded. Save your skills for the next song!' }
 };
 
 /* ---------- Colour themes for each place ---------- */
@@ -222,6 +267,11 @@ const THEMES = {
     name: 'Ferrous Deep Mining Rig', bg: '#120c08', wall: '#4a3426', wallTop: '#6e4e38', floorA: '#6f6762', floorB: '#675f5a', seam: '#4a423f',
     path: '#3b302a', pathEdge: '#1e1713', high: '#b3a493', highEdge: '#5a4c40', arrow: 'rgba(255,170,60,.6)', glow: '#ffa63d',
     decor: ['ore', 'drill', 'cart', 'rock'], wallKind: 'rock', sky: ['#1b1210', '#3a2216']
+  },
+  haven: {
+    name: 'Haven Station', bg: '#0b1222', wall: '#34405e', wallTop: '#4d5d86', floorA: '#9cc4b4', floorB: '#93baab', seam: '#729c8c',
+    path: '#56637d', pathEdge: '#323b50', high: '#ece5cc', highEdge: '#a59a74', arrow: 'rgba(255,232,150,.6)', glow: '#ffd66b',
+    decor: ['lamp', 'speaker', 'planter', 'bench'], wallKind: 'glass', sky: ['#101a36', '#2a1d4a']
   }
 };
 
@@ -242,7 +292,8 @@ const CAST = {
   marshal: { name: 'Marshal', color: '#8a5a2b', hat: 'cowboy' },
   bubbles: { name: 'Bubbles', color: '#ff6fb5', hat: 'bubble' },
   friend: { name: 'Hollow', color: '#9a7ae0', hat: 'none', ghost: true },
-  static: { name: 'The Static', color: '#3a2a20', hat: 'none', dark: true }
+  static: { name: 'The Static', color: '#3a2a20', hat: 'none', dark: true },
+  maestro: { name: 'The Conductor', color: '#2c3c66', hat: 'none', dark: true }
 };
 
 /* ---------- The Prologue ---------- */
@@ -262,6 +313,12 @@ const EPILOGUE2 = [
   'The Ferrous Deep lit up from top to bottom,\nevery window full of miners waving.',
   'The Hollow was whole again —\nnot loud, not lonely.\nJust listening.',
   'And when the HALCYON finally docked,\nthe whole crew stepped off together.\n\nThe Signal said: “Thank you.”'
+];
+
+const EPILOGUE3 = [
+  'The broadcast tower still sings every night —\nsoftly now, a lullaby\nfor the whole station.',
+  'The leftover signals found new jobs:\nnight-lights, door chimes,\nand one very proud lighthouse.',
+  'And the crew of the HALCYON\nnever heard “stay” again.\n\nJust: “See you tomorrow.”'
 ];
 
 /* ---------- Tutorial script (Level 1) ---------- */
@@ -702,14 +759,138 @@ const LEVELS = [
       ['juno', 'HALCYON, set a course. Home — the long way round, with everybody aboard.']
     ],
     radio: { 6: ['wrench', 'The Foreman! It drills under everything — wait for it to surface, then hit it hard!'] }
+  },
+
+  /* ================= CHAPTER 5: THE CHOIR ================= */
+  {
+    id: 15, chapter: 5, name: 'Welcome Home?', place: 'Docking Ring · Haven Station', theme: 'haven',
+    cols: 11, rows: 6, startDP: 22, lives: 7, scale: 1.1, crew: ['brick', 'tank', 'rook', 'lumi', 'sparky', 'echo', 'wrench', 'marshal', 'bubbles'],
+    routes: [R([[0, 2], [4, 2], [4, 4], [8, 4], [8, 1], [10, 1]]), R([[0, 5], [10, 1]], true)],
+    high: [[1, 1], [3, 1], [2, 3], [3, 3], [5, 3], [6, 3], [7, 2], [6, 1], [5, 5], [7, 5], [3, 5], [9, 2], [9, 3]],
+    walls: [[0, 0], [10, 5], [10, 4]],
+    doors: [[6, 4]], sabo: { 3: 'lights' },
+    waves: [
+      W(22, ['crawler', 8, 1.0], ['mender', 1, 1, 0, 6]),
+      W(24, ['mimic', 4, 2.0], ['mender', 2, 3, 0, 3], ['ghost', 3, 1.6, 1, 4]),
+      W(26, ['mite', 6, 1.2], ['mimic', 3, 2, 0, 4], ['mender', 2, 3, 0, 8]),
+      W(28, ['plated', 2, 4], ['mender', 3, 2.4, 0, 2], ['crawler', 10, 0.7, 0, 6], ['drone', 3, 2, 1, 6]),
+      W(30, ['spore', 3, 3], ['mender', 3, 2, 0, 4], ['shifter', 5, 1.3, 0, 8], ['ghost', 6, 1, 1, 4]),
+      W(0, ['golem', 2, 5], ['mender', 4, 1.8, 0, 3], ['mimic', 8, 1.2, 0, 6], ['drone', 5, 1.4, 1, 10])
+    ],
+    pre: [
+      ['ship', 'Docking at Haven Station. Welcome home, crew.'],
+      ['juno', 'Home! Hot showers, real food, and nobody whispering “stay”.'],
+      ['friend', '...Do you hear that? A song. Lots of little voices, singing together.'],
+      ['echo', 'It’s coming from the broadcast tower. The other leftover signals — they found each other.'],
+      ['friend', 'They watched you on the long way home. They saw how you help each other. Now they’re trying it too — but they think teamwork means winning.'],
+      ['juno', 'Then we show them how it’s really done. Commander: crewmates who stand close together make COMBOS. Try Brick right next to Tank!']
+    ],
+    post: [
+      ['brick', 'Did you SEE that? Me and Tank — BEST BUDS!'],
+      ['tank', '...the very best.'],
+      ['rook', 'Those moths kept patching the others up. Menders. Knock them out first.'],
+      ['friend', 'The song is louder in the market. Something there is making shields.']
+    ],
+    radio: { 1: ['juno', 'Crewmates close together team up — look for the glowing link! Brick and Tank, Echo and Rook…'], 2: ['lumi', 'That moth is HEALING them! Hit the Mender first!'], 5: ['echo', 'Rook — stand near me. I’ll call out the weak spots.'] }
+  },
+  {
+    id: 16, chapter: 5, name: 'Shield Wall', place: 'Market Deck · Haven Station', theme: 'haven',
+    cols: 12, rows: 7, startDP: 30, lives: 7, scale: 0.9, crew: ['brick', 'tank', 'rook', 'lumi', 'sparky', 'echo', 'wrench', 'marshal', 'bubbles'],
+    routes: [R([[0, 1], [5, 1], [5, 5], [11, 5]]), R([[11, 0], [8, 0], [8, 5]]), R([[0, 6], [11, 5]], true)],
+    high: [[1, 2], [2, 2], [3, 2], [4, 3], [3, 4], [6, 2], [6, 3], [7, 2], [7, 4], [9, 1], [9, 2], [9, 3], [10, 4], [4, 6], [7, 6], [10, 6]],
+    walls: [[0, 0], [11, 6], [2, 6]],
+    doors: [[3, 1], [8, 2]], sabo: { 2: 'o2', 5: 'reactor' },
+    waves: [
+      W(22, ['mimic', 5, 1.6], ['warden', 1, 1, 0, 6]),
+      W(24, ['warden', 1, 1, 0], ['crawler', 10, 0.8, 0, 2], ['mender', 2, 3, 1, 4], ['ghost', 3, 1.5, 2, 6]),
+      W(26, ['plated', 2, 4, 1], ['warden', 2, 5, 0, 2], ['mimic', 5, 1.4, 0, 4], ['drone', 3, 2, 2, 6]),
+      W(28, ['golem', 2, 4, 0], ['warden', 1, 1, 1, 2], ['mender', 3, 2, 1, 4], ['shifter', 5, 1.2, 0, 8]),
+      W(30, ['warden', 3, 4, 0], ['spore', 3, 3, 1, 2], ['mender', 3, 2, 0, 6], ['leech', 4, 1.5, 2, 4]),
+      W(32, ['plated', 4, 3, 0], ['warden', 2, 5, 1, 2], ['mite', 10, 0.8, 0, 6], ['drone', 6, 1.2, 2, 6]),
+      W(0, ['warden', 4, 3, 0], ['golem', 3, 4, 1, 2], ['mender', 4, 2, 0, 6], ['mimic', 10, 0.9, 1, 8], ['ghost', 8, 1, 2, 6])
+    ],
+    pre: [
+      ['lumi', 'See the blue glow? That’s a Warden. Anything standing near it takes about half damage.'],
+      ['marshal', 'Big, slow, and important. My favourite kind of target.'],
+      ['bubbles', 'It’s copying MY shields! Rude!'],
+      ['juno', 'Take the Wardens down first and the rest crumble. Rook and Marshal side by side make a Crossfire, too.']
+    ],
+    post: [
+      ['bubbles', 'Their shields were okay. Mine are better. Mine have SPARKLES.'],
+      ['echo', 'The next song is coming from the concert hall. It’s... very upbeat.'],
+      ['sparky', 'Is it a PARTY? Please say it’s a party.']
+    ],
+    radio: { 1: ['marshal', 'Warden on the floor. I’ll handle the big one — you mop up.'], 3: ['wrench', 'Brick, stand by my barricade — Hard Hats! We’ll make it twice as tough.'], 7: ['juno', 'Four Wardens! Focus them one at a time!'] }
+  },
+  {
+    id: 17, chapter: 5, name: 'Pep Rally', place: 'Concert Hall · Haven Station', theme: 'haven',
+    cols: 12, rows: 7, startDP: 28, lives: 7, scale: 1.2, crew: ['brick', 'tank', 'rook', 'lumi', 'sparky', 'echo', 'wrench', 'marshal', 'bubbles'],
+    routes: [R([[0, 3], [3, 3], [3, 1], [7, 1], [7, 5], [11, 5]]), R([[11, 0], [9, 0], [9, 5]]), R([[0, 0], [11, 5]], true)],
+    high: [[1, 2], [2, 2], [1, 4], [2, 4], [4, 2], [5, 2], [6, 2], [4, 4], [5, 4], [6, 4], [8, 2], [8, 3], [10, 2], [10, 3], [6, 6], [8, 6], [10, 6], [4, 0]],
+    walls: [[11, 6], [0, 6], [5, 0]],
+    doors: [[5, 1], [9, 3]], sabo: { 3: 'lights', 6: 'o2' },
+    waves: [
+      W(22, ['crawler', 10, 0.8], ['rally', 1, 1, 2, 6]),
+      W(24, ['rally', 2, 3, 2], ['mimic', 5, 1.4, 0, 2], ['crawler', 8, 0.7, 1, 6]),
+      W(26, ['bomber', 6, 1.2, 0], ['rally', 2, 3, 2, 2], ['mender', 2, 3, 1, 4], ['warden', 1, 1, 0, 10]),
+      W(28, ['shifter', 6, 1.2, 0], ['rally', 3, 2, 2, 3], ['mite', 8, 1, 1, 4], ['leech', 3, 2, 2, 8]),
+      W(30, ['warden', 2, 4, 0], ['bomber', 8, 1, 1, 2], ['rally', 4, 1.8, 2, 4], ['mimic', 8, 1, 0, 8]),
+      W(32, ['golem', 2, 5, 1], ['rally', 4, 1.6, 2, 2], ['mender', 3, 2, 0, 6], ['crawler', 14, 0.5, 0, 10], ['drone', 4, 1.5, 2, 8]),
+      W(0, ['rally', 6, 1.2, 2], ['warden', 3, 3, 0, 2], ['bomber', 10, 0.8, 1, 4], ['plated', 4, 3, 0, 8], ['brute', 1, 1, 0, 20])
+    ],
+    pre: [
+      ['sparky', 'It IS a party! Those drones are cheering so loud the foes are running to the beat!'],
+      ['juno', 'Cheer Drones fly, so guards can’t catch them. Shooters on the drones — and Echo to slow everyone back down.'],
+      ['echo', 'Sparky, stand with me. Static Ping — we charge each other up.'],
+      ['sparky', 'BEST. PARTY. EVER.']
+    ],
+    post: [
+      ['friend', 'Only one voice left. The Conductor. It holds the whole choir together.'],
+      ['kestrel', 'Then we go to the top of the tower. Together.'],
+      ['rook', 'Together. Yeah. I like how that sounds.']
+    ],
+    radio: { 1: ['rook', 'Drone overhead — it’s making them faster! Shooters, up!'], 3: ['bubbles', 'Beetles! Lumi, stand by me — Care Team!'], 7: ['juno', 'The Face Thief again, dancing to the music. Same answer as always!'] }
+  },
+  {
+    id: 18, chapter: 5, name: 'The Conductor', place: 'Broadcast Tower · Haven Station', theme: 'haven', finale3: true,
+    cols: 12, rows: 7, startDP: 40, lives: 8, scale: 0.85, crew: ['brick', 'tank', 'rook', 'lumi', 'sparky', 'echo', 'wrench', 'marshal', 'bubbles'],
+    routes: [R([[0, 1], [4, 1], [4, 4], [1, 4], [1, 6], [7, 6], [7, 2], [11, 2]]), R([[11, 6], [9, 6], [9, 2]]), R([[0, 6], [11, 2]], true)],
+    high: [[1, 2], [2, 2], [3, 2], [2, 3], [3, 3], [5, 2], [5, 3], [5, 5], [6, 4], [2, 5], [3, 5], [8, 3], [8, 4], [8, 5], [10, 3], [10, 4], [6, 1], [8, 1], [10, 1], [0, 3]],
+    walls: [[0, 0], [11, 0], [5, 0]],
+    doors: [[2, 1], [4, 6], [9, 4]], sabo: { 2: 'lights', 4: 'reactor', 6: 'o2' },
+    waves: [
+      W(22, ['mender', 3, 2, 0], ['crawler', 12, 0.6, 1, 2], ['rally', 2, 3, 2, 6]),
+      W(24, ['warden', 2, 4, 0], ['mimic', 6, 1.2, 1, 2], ['mender', 2, 3, 0, 6], ['ghost', 4, 1.4, 2, 4]),
+      W(26, ['bomber', 8, 1, 1], ['rally', 3, 2, 2, 2], ['plated', 3, 3, 0, 4], ['mender', 3, 2, 0, 10]),
+      W(28, ['golem', 2, 4, 0], ['warden', 2, 4, 1, 4], ['mite', 10, 0.8, 0, 6], ['leech', 4, 1.6, 2, 4]),
+      W(30, ['shifter', 8, 1, 0], ['rally', 4, 1.6, 2, 2], ['warden', 2, 4, 1, 4], ['spore', 3, 3, 0, 10], ['mender', 3, 2, 1, 12]),
+      W(0, ['conductor', 1, 1, 0], ['mender', 4, 2, 1, 8], ['warden', 3, 4, 0, 16], ['rally', 6, 1.4, 2, 10], ['bomber', 10, 1, 1, 24], ['golem', 2, 5, 0, 28])
+    ],
+    pre: [
+      ['maestro', 'LISTEN. TOGETHER WE ARE LOUD. TOGETHER WE ARE STRONG. TOGETHER WE WIN.'],
+      ['echo', 'Together isn’t about winning. It’s about nobody being alone.'],
+      ['juno', 'It changes its song every few seconds. RED is fast, GREEN heals, BLUE shields. Watch the colour and answer it.'],
+      ['friend', 'Be gentle with it. It only learned the loud half of the song.'],
+      ['juno', 'All hands — one last time. Together.']
+    ],
+    post: [
+      ['maestro', '...You didn’t win alone either.'],
+      ['friend', 'No one does. Come sing with us instead. A quieter song.'],
+      ['bubbles', 'Can it be a song about bubbles?'],
+      ['maestro', '...Yes. A song about bubbles.'],
+      ['juno', 'Haven Station, this is the HALCYON. The crew is home. All of us.']
+    ],
+    radio: { 6: ['juno', 'The Conductor! Watch its colour — RED fast, GREEN healing, BLUE shields!'] }
   }
 ];
+
 
 const CHAPTERS = [
   { id: 1, name: 'Wake Up', sub: 'The HALCYON stirs', color: '#42e8ff' },
   { id: 2, name: 'The Cold Signal', sub: 'Something wearing faces', color: '#c6a0ff' },
   { id: 3, name: 'The Hollow', sub: 'Who is knocking?', color: '#ff8a6b' },
-  { id: 4, name: 'The Long Way Home', sub: 'Somebody said hello', color: '#ffa63d' }
+  { id: 4, name: 'The Long Way Home', sub: 'Somebody said hello', color: '#ffa63d' },
+  { id: 5, name: 'The Choir', sub: 'Everybody, together', color: '#7affd6' }
 ];
 
 const DIFFICULTY = {
@@ -774,6 +955,7 @@ const LOOKS = {
     { id: 'halo', name: 'Halo', stars: 22 },
     { id: 'crown', name: 'Crown', stars: 26 },
     { id: 'laurel', name: 'Champion Laurel', stars: 0, bolts: 6 },
+    { id: 'note', name: 'Music Note', stars: 30 },
     { id: 'hardcore', name: 'Impostor Hunter', stars: 0, bolts: 15 }
   ],
   visor: [
@@ -784,7 +966,8 @@ const LOOKS = {
     { id: 'sunset', name: 'Sunset', stars: 15, c: ['#ffd36b', '#ff5a6a'] },
     { id: 'nebula', name: 'Nebula', stars: 20, c: ['#c9a6ff', '#3a1a7a'] },
     { id: 'chrome', name: 'Chrome', stars: 0, bolts: 3, c: ['#ffffff', '#7b8598'] },
-    { id: 'ember', name: 'Ember', stars: 34, c: ['#ffe2a8', '#ff6a1a'] }
+    { id: 'ember', name: 'Ember', stars: 34, c: ['#ffe2a8', '#ff6a1a'] },
+    { id: 'aurora', name: 'Aurora', stars: 44, c: ['#b8fff0', '#7a4cff'] }
   ],
   pet: [
     { id: 'none', name: 'No pet', stars: 0 },
@@ -794,6 +977,7 @@ const LOOKS = {
     { id: 'wisp', name: 'Friendly Wisp', stars: 17 },
     { id: 'starling', name: 'Starling', stars: 24 },
     { id: 'drillbit', name: 'Drill Bit', stars: 30 },
+    { id: 'choirling', name: 'Choirling', stars: 38 },
     { id: 'hollowpup', name: 'Little Hollow', stars: 0, bolts: 10 }
   ]
 };
@@ -841,6 +1025,10 @@ const MEDALS = [
   { id: 'thief', icon: '🎭', name: 'Face Off', desc: 'Defeat the Face Thief.', test: m => m.st.brute >= 1 },
   { id: 'heart', icon: '💜', name: 'Heard', desc: 'Finish Chapter 3.', test: m => m.flags.ch3 },
   { id: 'home', icon: '🏠', name: 'Home Again', desc: 'Finish Chapter 4.', test: m => m.flags.ch4 },
+  { id: 'choir', icon: '🎶', name: 'Encore', desc: 'Finish Chapter 5.', test: m => m.flags.ch5 },
+  { id: 'team', icon: '🤝', name: 'Teamwork', desc: 'Have 3 different combos going at the same time.', test: m => m.flags.team },
+  { id: 'combos', icon: '🔗', name: 'Better Together', desc: 'Make 100 combos.', test: m => m.st.combos >= 100 },
+  { id: 'menders', icon: '🦋', name: 'No Patch-Ups', desc: 'Stop 50 Mender Moths.', test: m => m.st.mender >= 50 },
   { id: 'stars30', icon: '⭐', name: 'Star Student', desc: 'Earn 30 stars.', test: m => m.stars >= 30 },
   { id: 'stars42', icon: '🌟', name: 'Perfectionist', desc: 'Earn 3 stars on every mission.', test: m => m.stars >= LEVELS.length * 3 },
   { id: 'bolts10', icon: '⚡', name: 'Challenger', desc: 'Earn 10 challenge bolts.', test: m => m.bolts >= 10 },
@@ -857,9 +1045,10 @@ const MEDALS = [
 const ENDLESS = { unlockAfter: 3, squad: 6, waveDur: 30, bossEvery: 5, saboEvery: 4 };
 const ENDLESS_POOL = [ // [foe, cost, first wave it can appear]
   ['crawler', 1, 1], ['mimic', 2.2, 1], ['ghost', 1.6, 2], ['drone', 2, 4], ['shifter', 2.4, 4], ['plated', 4.5, 5],
-  ['spore', 3.5, 7], ['mite', 1.8, 7], ['leech', 2.5, 8], ['bomber', 1.8, 10], ['golem', 6, 11]
+  ['spore', 3.5, 7], ['mite', 1.8, 7], ['leech', 2.5, 8], ['bomber', 1.8, 10], ['golem', 6, 11],
+  ['mender', 2.6, 9], ['rally', 2.4, 10], ['warden', 5, 12]
 ];
-const ENDLESS_BOSSES = ['brute', 'sporemother', 'foreman', 'heart'];
+const ENDLESS_BOSSES = ['brute', 'sporemother', 'foreman', 'conductor', 'heart'];
 /** Wave n (1-based) of an endless run: a few foe groups whose total cost grows every wave. */
 function endlessWave(level, n, rnd) {
   const air = level.routes.findIndex(r => r.air), ground = level.routes.map((r, i) => r.air ? -1 : i).filter(i => i >= 0);
