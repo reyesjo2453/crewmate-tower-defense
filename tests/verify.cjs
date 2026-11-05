@@ -231,6 +231,32 @@ const base = (process.env.BASE_URL || 'http://localhost:8000/').replace(/\/?$/, 
   assert.ok(await ui.locator('#segDiff .btn', { hasText: 'Story' }).count(), 'story difficulty offered');
   console.log('challenges, crew training, endless, boss intro, medals & settings screens ok');
 
+  // ---- side routes walk on to the reactor instead of leaking where they join
+  const joins = await ui.evaluate(() => LEVELS.map(l => { const rs = joinRoutes(l.routes), e = rs.find(r => !r.air).pts.at(-1); return rs.every(r => r.air || (r.pts.at(-1)[0] === e[0] && r.pts.at(-1)[1] === e[1])); }));
+  assert.ok(joins.every(Boolean), 'every walking route ends at the reactor');
+  // ---- save transfer code
+  await ui.evaluate(() => __t.toSettings()); await ui.click('#btnExport');
+  const code = await ui.inputValue('#codeOut'); assert.ok(code.startsWith('CREW1-'), 'save code made');
+  const before = await ui.evaluate(() => JSON.stringify(__t.save().stars)); await ui.click('#cClose');
+  await ui.evaluate(() => { __t.save().stars = {}; __t.persist(); });
+  await ui.click('#btnImport'); await ui.fill('#codeIn', 'CREW1-oops'); await ui.click('#cLoad');
+  assert.ok(/missing|changed|read/.test(await ui.textContent('#codeMsg')), 'bad code is rejected kindly');
+  await ui.fill('#codeIn', code.slice(0, 40) + '\n  ' + code.slice(40)); await ui.click('#cLoad'); await ui.click('#mYes');
+  assert.equal(await ui.evaluate(() => JSON.stringify(__t.save().stars)), before, 'save code restores progress (even with stray spaces)');
+  assert.equal(await ui.evaluate(() => JSON.parse(localStorage.getItem('crewmate-command-v1')).stars['1']), JSON.parse(before)['1'], 'loaded save persisted');
+  console.log('route joins & save codes ok');
+  // ---- show-me coaching the first time a new crewmate joins
+  await ui.evaluate(() => { delete __t.save().coach.new_tank; __t.save().coach.door = true; __t.setLevel(LEVELS[1]); __t.beginGame(); });
+  await ui.waitForSelector('.card[data-type=tank].tut-focus', { timeout: 3000 });
+  assert.ok(await ui.isVisible('#radio') && /THREE/.test(await ui.textContent('#radioTxt')), 'new crewmate explains themselves');
+  const hintT = await ui.evaluate(() => __t.G.hint); assert.ok(Array.isArray(hintT), 'a tile glows for them');
+  await ui.evaluate(() => { const g = __t.G; g.dp = 99; g.deploy('brick', ...(() => { const h = g.suggest('brick'); return [h.x, h.y]; })()); });
+  assert.ok(await ui.evaluate(() => !!__t.G.hint && !__t.save().coach.new_tank), 'placing someone else keeps pointing at the new crewmate');
+  await ui.evaluate(() => { const g = __t.G, h = g.hint; g.deploy('tank', h[0], h[1]); });
+  assert.ok(await ui.evaluate(() => __t.save().coach.new_tank && !document.querySelector('.card.tut-focus') && __t.G.crew.some(c => c.type === 'tank')), 'coaching ends once they are placed');
+  await ui.evaluate(() => __t.G.stop());
+  console.log('new crewmate coaching ok');
+
   // ---- offline PWA
   const pwa = await browser.newContext({ viewport: { width: 900, height: 430 } }); const pp = await pwa.newPage();
   await pp.goto(base); await pp.evaluate(() => navigator.serviceWorker.ready); await pp.waitForTimeout(800); await pp.reload(); await pp.waitForTimeout(500);

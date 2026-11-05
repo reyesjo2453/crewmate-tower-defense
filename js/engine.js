@@ -17,6 +17,25 @@ function prepRoute(r) {
   }
   return { air: r.air, pts, segs, len };
 }
+// a side route that ends where it joins another walking route carries on along that route to the reactor
+function joinRoutes(routes) {
+  const ground = routes.filter(r => !r.air), main = ground[0]; if (!main) return routes;
+  const same = (a, b) => a[0] === b[0] && a[1] === b[1], end = main.pts[main.pts.length - 1];
+  const onSeg = (p, a, b) => (p[0] - a[0]) * (b[1] - a[1]) === (p[1] - a[1]) * (b[0] - a[0]) &&
+    p[0] >= Math.min(a[0], b[0]) && p[0] <= Math.max(a[0], b[0]) && p[1] >= Math.min(a[1], b[1]) && p[1] <= Math.max(a[1], b[1]);
+  const extend = (r, depth) => {
+    const e = r.pts[r.pts.length - 1]; if (r.air || same(e, end) || depth > 3) return r;
+    for (const o of ground) {
+      if (o === r) continue;
+      for (let i = 0; i < o.pts.length - 1; i++) if (onSeg(e, o.pts[i], o.pts[i + 1])) {
+        const rest = o.pts.slice(i + 1).filter((q, j) => j > 0 || !same(q, e));
+        return extend(Object.assign({}, r, { pts: r.pts.concat(rest) }), depth + 1);
+      }
+    }
+    return r;
+  };
+  return routes.map(r => extend(r, 0));
+}
 function posAt(route, d) {
   const s = route.segs; if (d <= 0) return { x: s[0].x, y: s[0].y, dx: s[0].dx, dy: s[0].dy };
   for (const g of s) if (d <= g.start + g.l) { const k = d - g.start; return { x: g.x + g.dx * k, y: g.y + g.dy * k, dx: g.dx, dy: g.dy }; }
@@ -40,7 +59,7 @@ class Game {
     this.hpMul = this.mods.has('tough') ? 1.3 : 1; this.spdMul = this.mods.has('fast') ? 1.2 : 1; this.timeScale = 1; this.endT = 0;
     if (this.endless) { this.erng = mulberry32(level.id * 131 + 17); level.waves = []; for (let i = 1; i <= 2; i++) level.waves.push(endlessWave(level, i, this.erng)); }
     this.cols = level.cols; this.rows = level.rows;
-    this.routes = level.routes.map(prepRoute);
+    this.routes = joinRoutes(level.routes).map(prepRoute);
     this.pathSet = new Set(); dirsOf(level.routes).forEach((_, k) => this.pathSet.add(k));
     this.highSet = new Set(level.high.map(p => keyOf(p[0], p[1])));
     this.dp = level.startDP + this.diff.startDP; this.dpMax = 99; this.dpRate = this.diff.dp;
@@ -507,12 +526,13 @@ class Game {
   }
 
   /* ---------- hint: a friendly suggestion of who to place where ---------- */
-  suggest() {
+  suggest(only) {
     const want = ['brick', 'rook', 'sparky', 'lumi', 'tank', 'bubbles', 'echo', 'marshal', 'wrench', 'rook', 'sparky', 'brick', 'marshal'];
     const have = {}; this.crew.forEach(c => { if (!c.barricade) have[c.type] = (have[c.type] || 0) + 1; });
     const need = {}; let type = null;
-    for (const k of want) { need[k] = (need[k] || 0) + 1; if (this.avail.includes(k) && (have[k] || 0) < need[k]) { type = k; break; } }
-    if (!type) { const c = this.crew.filter(c => !c.barricade && this.promoteCost(c) != null).sort((a, b) => a.lv - b.lv)[0]; return c ? { promote: c } : null; }
+    if (only) type = this.avail.includes(only) ? only : null;
+    else for (const k of want) { need[k] = (need[k] || 0) + 1; if (this.avail.includes(k) && (have[k] || 0) < need[k]) { type = k; break; } }
+    if (!type) { if (only) return null; const c = this.crew.filter(c => !c.barricade && this.promoteCost(c) != null).sort((a, b) => a.lv - b.lv)[0]; return c ? { promote: c } : null; }
     const b = CREW[type], ground = this.routes.filter(r => !r.air);
     // how far along the routes each floor tile is: the middle of the route is the sweet spot for a guard
     const along = {}; ground.forEach(r => { for (let d = 0; d <= r.len; d += 0.25) { const q = posAt(r, d), k = keyOf(Math.floor(q.x), Math.floor(q.y)); if (!(k in along)) along[k] = d / r.len; } });

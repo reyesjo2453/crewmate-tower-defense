@@ -54,7 +54,7 @@
   let current = 'title';
   function show(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.toggle('hidden', s.id !== 's-' + id));
-    current = id; if (id !== 'game' && G) { G.stop(); }
+    current = id; if (id !== 'game') { if (G) G.stop(); $('rotate').classList.add('hidden'); }
     if (id !== 'ward') Wardrobe.stop();
     if (id === 'title' || id === 'hub' || id === 'log' || id === 'set' || id === 'squad' || id === 'ward' || id === 'endless') Sound.mood('title');
     else if (id === 'dialog' || id === 'intro') Sound.mood('story');
@@ -232,6 +232,53 @@
   $('btnTutAgain').onclick = () => { save.tutDone = false; persist(); $('btnTutAgain').textContent = 'Tutorial will play in Mission 1 ✓'; };
   $('btnReset').onclick = () => confirmBox('Reset everything?', 'This erases your stars, unlocks and logbook.', 'Reset', () => { save = defaults(); applyPrefs(); persist(); Sound.setMusic(save.music); Sound.setSfx(save.sfx); renderSettings(); });
   $('setBack').onclick = () => { Sound.play('click'); toTitle(); };
+
+  /* ----- save transfer: the whole save as one copy-and-paste code ----- */
+  const CODE_TAG = 'CREW1-';
+  function sum(str) { let h = 7; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h.toString(36).slice(-4).padStart(4, '0'); }
+  function saveCode() {
+    const body = btoa(unescape(encodeURIComponent(JSON.stringify(save))));
+    return CODE_TAG + sum(body) + body;
+  }
+  function readCode(code) {
+    code = (code || '').replace(/\s+/g, '');
+    if (!code.startsWith(CODE_TAG)) return { err: 'That doesn’t look like a save code. It should start with ' + CODE_TAG };
+    const ck = code.slice(CODE_TAG.length, CODE_TAG.length + 4), body = code.slice(CODE_TAG.length + 4);
+    if (sum(body) !== ck) return { err: 'Part of the code is missing or changed. Try copying the whole thing again.' };
+    try {
+      const d = JSON.parse(decodeURIComponent(escape(atob(body))));
+      if (!d || typeof d !== 'object' || typeof d.stars !== 'object') throw 0;
+      const out = Object.assign(defaults(), d); out.a11y = Object.assign(defaults().a11y, d.a11y || {});
+      return { save: out };
+    } catch (e) { return { err: 'That code couldn’t be read. Try copying the whole thing again.' }; }
+  }
+  function copyText(text, ta, btn) {
+    const ok = () => { btn.textContent = 'Copied! ✓'; Sound.play('click'); };
+    const old = () => { ta.focus(); ta.select(); try { document.execCommand('copy'); ok(); } catch (e) { btn.textContent = 'Select and copy it'; } };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, old); else old();
+  }
+  $('btnExport').onclick = () => {
+    Sound.play('click'); const code = saveCode();
+    modal(`<h2>Your save code</h2><p class="tiny">${totalStars()} ★ · ${Object.keys(save.stars).length} missions. Paste this into “Load a save code” on your other device.</p>
+      <textarea class="codebox" id="codeOut" readonly>${code}</textarea><div class="row"><button class="btn primary" id="cCopy">Copy</button><button class="btn" id="cClose">Done</button></div>`);
+    const ta = $('codeOut'); ta.onclick = () => ta.select();
+    $('cCopy').onclick = () => copyText(code, ta, $('cCopy')); $('cClose').onclick = closeModal;
+  };
+  $('btnImport').onclick = () => {
+    Sound.play('click');
+    modal(`<h2>Load a save code</h2><p class="tiny">This replaces the progress on this device.</p>
+      <textarea class="codebox" id="codeIn" placeholder="Paste your ${CODE_TAG}… code here" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+      <p class="tiny" id="codeMsg"></p><div class="row"><button class="btn primary" id="cLoad">Load</button><button class="btn" id="cCancel">Cancel</button></div>`);
+    $('cCancel').onclick = closeModal;
+    $('cLoad').onclick = () => {
+      const r = readCode($('codeIn').value);
+      if (r.err) { $('codeMsg').textContent = r.err; $('codeIn').classList.add('bad'); Sound.play('deny'); return; }
+      const st = Object.values(r.save.stars).reduce((a, b) => a + b, 0);
+      confirmBox('Replace this save?', `Load the save with ${st} ★ and ${Object.keys(r.save.stars).length} missions cleared? Progress on this device will be replaced.`, 'Load it', () => {
+        save = r.save; applyPrefs(); persist(); Sound.setMusic(save.music); Sound.setSfx(save.sfx); renderSettings(); toast('💾 Save loaded!');
+      });
+    };
+  };
 
   /* ---------- Modals ---------- */
   function modal(html) { $('modalCard').innerHTML = html; $('modal').classList.remove('hidden'); }
@@ -444,7 +491,7 @@
      GAME CONTROLLER
      ============================================================ */
   const cv = $('cv'), stage = $('stage');
-  let G = null, lvl = null, tut = null, tipTimer = 0, lastHud = {}, wasCleared = false, forceTut = false, coachT = 0, hintT = 0;
+  let G = null, lvl = null, tut = null, tipTimer = 0, lastHud = {}, wasCleared = false, forceTut = false, coachT = 0, hintT = 0, showMe = null;
 
   function playLevel(id) {
     lvl = LEVELS.find(l => l.id === id); wasCleared = (save.stars[id] || 0) > 0; squad = null; chosenMods = [];
@@ -464,11 +511,31 @@
     tut = null; G.frozen = false;
     if (runTut) tut = new Tutorial(); else if (lvl.endless) showBanner('ENDLESS', 'How long can you last?', false); else showBanner(chosenMods.length ? 'CHALLENGE ON ' + chosenMods.map(k => MODIFIERS[k].icon).join(' ') : 'Deploy your crew', 'then press START', false);
     $('btnSpeed').innerHTML = '1&times;';
-    clearTimeout(coachT);
-    if (!runTut && G.doors.length && !save.coach.door) {
-      const d = G.doors[0]; coachT = setTimeout(() => { if (G.level !== lvl) return; radio(DOOR.coach[0], DOOR.coach[1], 10000); G.hint = [d.x, d.y]; coachT = setTimeout(() => { if (!tut) G.hint = null; }, 9000); }, 1400);
-    }
+    clearTimeout(coachT); showMe = null;
+    const nc = lvl.newCrew;
+    if (!runTut && nc && SHOWME[nc] && !save.coach['new_' + nc] && G.avail.includes(nc)) {
+      showMe = { type: nc };
+      coachT = setTimeout(() => { if (G.level !== lvl || !showMe) return; radio(nc, SHOWME[nc].say, 11000); pointShowMe(); }, 900);
+    } else doorCoach(1400);
     if (innerHeight > innerWidth * 1.1) { const r = $('rotate'); r.classList.remove('hidden'); r.style.animation = 'none'; r.offsetHeight; r.style.animation = ''; setTimeout(() => r.classList.add('hidden'), 6000); }
+  }
+  function doorCoach(ms) {
+    if (tut || !G.doors.length || save.coach.door) return;
+    const d = G.doors[0]; coachT = setTimeout(() => { if (G.level !== lvl) return; radio(DOOR.coach[0], DOOR.coach[1], 10000); G.hint = [d.x, d.y]; coachT = setTimeout(() => { if (!tut) G.hint = null; }, 9000); }, ms);
+  }
+  // glow the new crewmate's card and the best tile for them, until they're placed
+  function pointShowMe() {
+    if (!showMe) return;
+    const card = document.querySelector(`.card[data-type="${showMe.type}"]`); if (card) { card.classList.add('tut-focus'); card.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+    const h = G.suggest(showMe.type); G.hint = h ? [h.x, h.y] : null;
+  }
+  function doneShowMe(placed) {
+    if (!showMe) return; const k = showMe.type; showMe = null;
+    document.querySelectorAll('.card.tut-focus').forEach(c => c.classList.remove('tut-focus'));
+    if (!placed) return;
+    save.coach['new_' + k] = true; persist(); G.hint = null;
+    if (SHOWME[k].after) { clearTimeout(radioPend); radioPend = setTimeout(() => radio(k, SHOWME[k].after, 7000), 500); }
+    doorCoach(5000);
   }
 
   function fit() { if (G && lvl && current === 'game') G.resize(stage.clientWidth, stage.clientHeight); }
@@ -529,7 +596,9 @@
           tip(d.fixed ? 'Fixed! Nice work, Commander.' : d.kind === 'reactor' ? 'The reactor overheated!' : SABOTAGE[d.kind].name + ' wore off.'); break;
         case 'placing': syncCards(); if (d) tut && tut.on('select:' + d); break;
         case 'select': renderPanel(d); if (d) tut && tut.on('select:field'); break;
-        case 'deploy': tut && tut.on('deploy:' + d.type); if (!tut && G.hint) G.hint = null; break;
+        case 'deploy': tut && tut.on('deploy:' + d.type);
+          if (showMe) { if (d.type === showMe.type) doneShowMe(true); else pointShowMe(); }
+          else if (!tut && G.hint) G.hint = null; break;
         case 'skill': bump('skills'); tut && tut.on('skill'); break;
         case 'promote': bump('promotes'); break;
         case 'leak': if (d) { pop(); buzz(50); } break;
@@ -787,5 +856,5 @@
   if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !TEST) {
     addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => { }));
   }
-  if (TEST) window.__t = { G, save: () => save, playLevel, toSquad, Wardrobe, squad: () => squad, toHub, toEndless, toLog, toSettings, checkMedals, mods: m => { if (m) chosenMods = m; return chosenMods; }, lvl: () => lvl, LEVELS, beginGame, setLevel: l => { lvl = l; }, persist, unlock: () => { LEVELS.forEach(l => { save.stars[l.id] = save.stars[l.id] || 1; }); persist(); } };
+  if (TEST) window.__t = { G, save: () => save, playLevel, toSquad, Wardrobe, squad: () => squad, toHub, toEndless, toLog, toSettings, checkMedals, saveCode, readCode, mods: m => { if (m) chosenMods = m; return chosenMods; }, lvl: () => lvl, LEVELS, beginGame, setLevel: l => { lvl = l; }, persist, unlock: () => { LEVELS.forEach(l => { save.stars[l.id] = save.stars[l.id] || 1; }); persist(); } };
 })();
