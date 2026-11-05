@@ -12,7 +12,7 @@
    danger (0..1) adds a heartbeat that speeds up as foes near the reactor.
    ============================================================ */
 const Sound = (() => {
-  let ctx = null, master, comp, musicBus, sfxBus, verb, verbIn, dly, noiseBuf;
+  let ctx = null, master, comp, musicBus, sfxBus, verb, verbIn, dly, noiseBuf, duckG, mfilt, sfxVerb;
   let sfxOn = true, musicOn = true, timer = 0;
   const S = { mood: 'title', pendingMood: null, bpm: 76, step: 0, next: 0, intensity: 0, wantIntensity: 0, danger: 0, sting: 0 };
 
@@ -28,8 +28,14 @@ const Sound = (() => {
     ctx = c;
     comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.2;
     master = ctx.createGain(); master.gain.value = 0.8; master.connect(comp); comp.connect(ctx.destination);
-    musicBus = ctx.createGain(); musicBus.gain.value = musicOn ? 0.55 : 0; musicBus.connect(master);
-    sfxBus = ctx.createGain(); sfxBus.gain.value = 0.55; sfxBus.connect(master);
+    // music → duck (dips under big hits) → muffle (low-pass while paused) → master
+    duckG = ctx.createGain(); mfilt = ctx.createBiquadFilter(); mfilt.type = 'lowpass'; mfilt.frequency.value = 20000; mfilt.Q.value = 0.5;
+    duckG.connect(mfilt); mfilt.connect(master);
+    musicBus = ctx.createGain(); musicBus.gain.value = musicOn ? 0.55 : 0; musicBus.connect(duckG);
+    sfxBus = ctx.createGain(); sfxBus.gain.value = 1.1; sfxBus.connect(master);
+    // a short, bright room for sound effects (separate from the music's long hall)
+    sfxVerb = ctx.createConvolver(); { const n = Math.floor(ctx.sampleRate * 0.9), b = ctx.createBuffer(2, n, ctx.sampleRate); for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 4); } sfxVerb.buffer = b; }
+    const sv = ctx.createGain(); sv.gain.value = 0.55; sfxVerb.connect(sv); sv.connect(sfxBus);
     // reverb: generated impulse response
     verb = ctx.createConvolver(); const len = Math.floor(ctx.sampleRate * 2.6), ir = ctx.createBuffer(2, len, ctx.sampleRate);
     for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
@@ -232,63 +238,131 @@ const Sound = (() => {
     S.sting = t + 3.6; S.pendingMood = 'story';
   }
 
-  /* ---------- sound effects ---------- */
-  function tone(freq, dur, type, vol, when, slide) {
-    if (!ctx) return; const t = ctx.currentTime + (when || 0);
-    const o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = type || 'sine'; o.frequency.setValueAtTime(freq, t);
-    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, slide), t + dur);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol || 0.15, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(sfxBus); o.start(t); o.stop(t + dur + 0.05);
+  /* ---------- sound effects ----------
+     Every effect is a few layers — a noise transient for the 'hit', a pitched body,
+     sometimes a low thump — panned to where it happened, with a touch of room.
+     Each play is nudged a little in pitch so rapid repeats don't sound robotic. */
+  let V = 1, PAN = 0, live = 0, muffled = false;
+  function dest(wet) {
+    let out = sfxBus;
+    const head = ctx.createGain();
+    if (PAN && ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = PAN; head.connect(p); p.connect(sfxBus); out = p; }
+    else head.connect(sfxBus);
+    if (wet) { const g = ctx.createGain(); g.gain.value = wet; out.connect(g); g.connect(sfxVerb); }
+    return head;
   }
-  let lastShot = 0;
+  /** pitched layer: f → f2 over dur (or P.slide seconds) */
+  function osc(when, f, f2, dur, type, vol, P) {
+    P = P || {}; const t = ctx.currentTime + (when || 0);
+    const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type || 'sine'; o.frequency.setValueAtTime(f * V, t);
+    if (f2) o.frequency.exponentialRampToValueAtTime(Math.max(20, f2 * V), t + (P.slide || dur));
+    if (P.det) o.detune.value = P.det;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + (P.a || 0.004)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    let n = o; if (P.lp) { const fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = P.lp; fl.Q.value = P.q || 0.8; o.connect(fl); n = fl; }
+    n.connect(g); g.connect(dest(P.wet)); o.start(t); o.stop(t + dur + 0.05);
+  }
+  /** noise layer through a sweeping filter */
+  function nz(when, dur, vol, ftype, f, f2, q, wet) {
+    const t = ctx.currentTime + (when || 0), n = noise(t, dur), fl = ctx.createBiquadFilter(), g = ctx.createGain();
+    fl.type = ftype; fl.frequency.setValueAtTime(f, t); if (f2) fl.frequency.exponentialRampToValueAtTime(f2, t + dur); fl.Q.value = q || 0.8;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    n.connect(fl); fl.connect(g); g.connect(dest(wet));
+  }
+  /** music dips out of the way of a big moment, then swells back */
+  function duck(depth, hold) {
+    if (!duckG) return; const t = ctx.currentTime, gn = duckG.gain;
+    gn.cancelScheduledValues(t); gn.setValueAtTime(gn.value, t); gn.setTargetAtTime(1 - depth, t, 0.02); gn.setTargetAtTime(1, t + hold, 0.3);
+  }
+  const arp = (notes, gap, type, vol, len, wet, when) => notes.forEach((f, i) => osc((when || 0) + i * gap, f, 0, len, type, vol, { wet }));
+  // kept for the alarm, which wants a plain beep
+  function tone(freq, dur, type, vol, when, slide) { osc(when, freq, slide, dur, type, vol || 0.15, { a: 0.012 }); }
+
   const SFX = {
-    deploy: () => { tone(330, .12, 'triangle', .2); tone(495, .16, 'triangle', .18, .07); },
-    retreat: () => tone(420, .18, 'triangle', .16, 0, 200),
-    shoot: () => tone(880, .07, 'square', .05, 0, 420),
-    slash: () => tone(220, .09, 'sawtooth', .08, 0, 90),
-    zap: () => { tone(160, .2, 'sawtooth', .09, 0, 700); tone(1200, .12, 'square', .05, .02, 300); },
-    heal: () => { tone(660, .2, 'sine', .12); tone(880, .24, 'sine', .1, .08); },
-    ping: () => tone(1320, .25, 'sine', .08, 0, 900),
-    hit: () => tone(140, .06, 'square', .05, 0, 80),
-    pop: () => tone(300, .12, 'triangle', .1, 0, 700),
-    skill: () => { [392, 523, 659, 784].forEach((f, i) => tone(f, .16, 'triangle', .14, i * .06)); },
-    leak: () => { tone(110, .35, 'sawtooth', .18, 0, 55); },
-    wave: () => { tone(196, .5, 'sawtooth', .12); tone(294, .5, 'sawtooth', .09, .02); },
-    boss: () => { tone(98, .9, 'sawtooth', .18, 0, 70); tone(147, .9, 'square', .08, .05); },
-    click: () => tone(600, .06, 'triangle', .1),
-    deny: () => tone(150, .15, 'square', .08, 0, 110),
-    promote: () => { [523, 659, 784, 1047].forEach((f, i) => tone(f, .12, 'triangle', .13, i * .05)); },
+    deploy: () => { nz(0, .12, .2, 'lowpass', 900, 150); osc(0, 150, 55, .16, 'sine', .3); osc(.05, 520, 0, .1, 'triangle', .1, { wet: .2 }); osc(.11, 780, 0, .14, 'triangle', .09, { wet: .3 }); },
+    retreat: () => { nz(0, .28, .12, 'bandpass', 2400, 400, 1.2); osc(0, 520, 240, .22, 'triangle', .1); },
+    shoot: () => { nz(0, .03, .07, 'highpass', 3500); osc(0, 1500, 320, .07, 'square', .04, { lp: 4000 }); osc(0, 190, 80, .05, 'sine', .12); },
+    cannon: () => { nz(0, .28, .26, 'lowpass', 1600, 180, 1, .25); osc(0, 130, 38, .26, 'sine', .34); osc(0, 640, 110, .09, 'square', .05, { lp: 2500 }); duck(.18, .1); },
+    hit: () => { nz(0, .04, .13, 'bandpass', 2600, 1200, 1.4); osc(0, 320, 120, .05, 'sine', .1); },
+    hitBig: () => { nz(0, .12, .18, 'bandpass', 1400, 400, 1); osc(0, 170, 48, .15, 'sine', .22); },
+    slash: () => { nz(0, .1, .2, 'bandpass', 4200, 1100, 1.6); osc(0, 260, 110, .07, 'triangle', .07); },
+    thump: () => { osc(0, 115, 42, .16, 'sine', .28); nz(0, .07, .14, 'lowpass', 700, 200); },
+    zap: () => { osc(0, 170, 950, .14, 'sawtooth', .07, { lp: 3200 }); nz(0, .14, .08, 'highpass', 4500, 0, 0.8, .2); osc(.02, 1700, 380, .1, 'square', .035); },
+    ping: () => { osc(0, 1320, 1150, .38, 'sine', .1, { wet: .55 }); osc(0, 1980, 0, .18, 'sine', .022, { wet: .4 }); },
+    heal: () => { osc(0, 660, 0, .24, 'sine', .08, { a: .02, wet: .45 }); osc(.07, 990, 0, .26, 'sine', .06, { a: .02, wet: .55 }); nz(0, .25, .015, 'highpass', 7000, 0, 0.7, .5); },
+    pop: () => { osc(0, 420, 1250, .08, 'sine', .14); nz(0, .05, .06, 'bandpass', 1900, 0, 1.4); osc(.05, 900, 0, .05, 'triangle', .035); },
+    popBig: () => { osc(0, 240, 720, .14, 'sine', .16); nz(0, .22, .2, 'lowpass', 1200, 160); osc(0, 95, 38, .22, 'sine', .3); duck(.15, .1); },
+    bossDown: () => { nz(0, 1.3, .36, 'lowpass', 2600, 90, 1, .5); osc(0, 85, 28, 1, 'sine', .45); osc(.02, 170, 40, .5, 'sawtooth', .07, { lp: 900 }); arp([523, 659, 784, 1047], .09, 'triangle', .1, .5, .5, .2); duck(.75, .9); },
+    skill: () => { nz(0, .32, .06, 'bandpass', 500, 4500, 2); osc(0, 90, 45, .2, 'sine', .22); arp([523, 659, 784, 1047], .055, 'triangle', .09, .2, .4, .05); duck(.3, .3); },
+    leak: () => { osc(0, 230, 105, .42, 'sawtooth', .13, { lp: 1100 }); osc(0, 72, 36, .4, 'sine', .32); nz(0, .3, .1, 'lowpass', 500, 120); duck(.45, .35); },
+    // horn + a snare roll that builds into the wave
+    wave: () => { osc(0, 196, 0, .6, 'sawtooth', .09, { lp: 1500, a: .04 }); osc(.01, 294, 0, .6, 'sawtooth', .07, { lp: 1500, a: .04 });
+      [0, .08, .15, .21, .26, .3, .34].forEach((d, i) => { nz(d, .07, .05 + i * .018, 'bandpass', 1900, 0, .8); osc(d, 210 - i * 10, 120, .06, 'triangle', .04 + i * .01); }); },
+    boss: () => { osc(0, 73, 0, 1.1, 'sawtooth', .14, { lp: 600, a: .08 }); osc(.05, 110, 0, 1, 'sawtooth', .09, { lp: 700, a: .08 }); nz(0, 1.1, .18, 'lowpass', 260, 60); duck(.5, .8); },
+    click: () => { osc(0, 920, 700, .045, 'triangle', .13); nz(0, .012, .05, 'highpass', 6000); },
+    deny: () => { osc(0, 230, 0, .07, 'square', .06, { lp: 1600 }); osc(.09, 175, 0, .1, 'square', .06, { lp: 1600 }); },
+    promote: () => { arp([523, 659, 784, 1047, 1319], .05, 'triangle', .1, .2, .4); nz(.05, .4, .02, 'highpass', 8000, 0, 0.7, .6); osc(0, 110, 55, .15, 'sine', .15); },
     win: () => { if (!musicOn) [523, 659, 784, 1047].forEach((f, i) => tone(f, .24, 'triangle', .17, i * .12)); sting(true); },
     lose: () => { if (!musicOn) [392, 349, 311, 262].forEach((f, i) => tone(f, .4, 'sawtooth', .12, i * .22)); sting(false); },
-    type: () => tone(520 + Math.random() * 120, .03, 'square', .025),
-    door: () => { tone(90, .22, 'sawtooth', .16, 0, 50); tone(1400, .05, 'square', .05, .16); tone(70, .12, 'square', .12, .18, 40); },
+    type: () => osc(0, 520 + Math.random() * 120, 0, .03, 'square', .02),
+    door: () => { nz(0, .22, .26, 'lowpass', 3200, 260); osc(0, 92, 44, .26, 'sine', .32); osc(.17, 1400, 0, .035, 'square', .04); nz(.02, .1, .05, 'bandpass', 5200, 0, 2, .3); duck(.2, .15); },
     alarm: () => { [0, .32, .64].forEach(d => { tone(880, .16, 'square', .07, d); tone(660, .16, 'square', .07, d + .16); }); },
-    fix: () => tone(740, .07, 'square', .07, 0, 980),
-    fixed: () => { [659, 880, 1175].forEach((f, i) => tone(f, .14, 'triangle', .14, i * .07)); },
-    build: () => { tone(300, .06, 'square', .07); tone(420, .06, 'square', .07, .09); tone(520, .1, 'triangle', .09, .18); },
-    shield: () => { tone(880, .18, 'sine', .08, 0, 1320); tone(1320, .14, 'sine', .05, .06, 1760); },
-    bubble: () => tone(1500, .08, 'sine', .09, 0, 500),
-    boom: () => { tone(80, .45, 'sawtooth', .2, 0, 30); tone(160, .2, 'square', .1, 0, 50); },
-    drill: () => { tone(110, .6, 'sawtooth', .1, 0, 180); tone(55, .6, 'square', .08, .05, 90); },
-    medal: () => { [784, 988, 1175, 1568].forEach((f, i) => tone(f, .18, 'triangle', .13, i * .08)); },
-    bossIntro: () => { tone(98, 1.1, 'sawtooth', .16, 0, 49); tone(147, 1.1, 'square', .07, .1, 73); tone(1568, .4, 'sine', .05, .5, 784); }
+    fix: () => { osc(0, 740, 980, .07, 'square', .08, { lp: 3000 }); nz(0, .02, .04, 'highpass', 5000); },
+    fixed: () => { arp([659, 880, 1175], .07, 'triangle', .12, .16, .4); },
+    build: () => { [0, .1, .2].forEach((d, i) => { nz(d, .035, .1, 'bandpass', 2600 + i * 300, 0, 2); osc(d, 820 + i * 120, 0, .04, 'square', .03); osc(d, 160, 70, .06, 'sine', .08); }); },
+    shield: () => { osc(0, 600, 1250, .26, 'sine', .07, { wet: .5 }); osc(.05, 900, 1800, .2, 'sine', .04, { wet: .5 }); },
+    bubble: () => { osc(0, 420, 1700, .07, 'sine', .11); nz(0, .03, .05, 'highpass', 4000); },
+    boom: () => { nz(0, .75, .36, 'lowpass', 3200, 140, 1, .3); osc(0, 105, 34, .6, 'sine', .38); duck(.45, .4); },
+    down: () => { osc(0, 420, 150, .38, 'triangle', .1); osc(.02, 210, 75, .38, 'triangle', .07); nz(0, .22, .1, 'lowpass', 800, 150); duck(.3, .4); },
+    drill: () => { osc(0, 110, 180, .6, 'sawtooth', .09, { lp: 900 }); osc(.05, 55, 90, .6, 'square', .06, { lp: 500 }); nz(0, .6, .1, 'bandpass', 900, 300, 2); },
+    medal: () => { arp([784, 988, 1175, 1568], .08, 'triangle', .12, .2, .45); nz(.1, .5, .02, 'highpass', 8000, 0, 0.7, .6); },
+    bossIntro: () => { osc(0, 98, 49, 1.1, 'sawtooth', .14, { lp: 700 }); osc(.1, 147, 73, 1.1, 'square', .06, { lp: 700 }); osc(.5, 1568, 784, .4, 'sine', .05, { wet: .6 }); nz(0, 1.2, .16, 'lowpass', 220, 60); duck(.5, 1); }
   };
-  const THROTTLE = { bubble: 0.08, boom: 0.1, build: 0.2, fix: 0.05, shoot: 0.06, hit: 0.05, slash: 0.07, zap: 0.08, ping: 0.08, heal: 0.1, pop: 0.04 };
+  const THROTTLE = { bubble: 0.08, boom: 0.1, build: 0.2, fix: 0.05, shoot: 0.06, hit: 0.045, hitBig: 0.06, slash: 0.07, thump: 0.08, zap: 0.08, ping: 0.08, heal: 0.1, pop: 0.04, popBig: 0.06, cannon: 0.08 };
+  // busy moments: the small, frequent sounds drop out first so the big ones stay clear
+  const CHEAP = new Set(['shoot', 'hit', 'slash', 'thump', 'ping', 'pop', 'heal', 'zap', 'type']);
   const lastAt = {};
 
+  /* ---------- voices: little formant 'babble' so each crewmate sounds like someone ---------- */
+  const VOWELS = [[730, 1090], [270, 2290], [530, 1840], [570, 840], [300, 870], [660, 1720]];
+  function syllable(when, pitch, len, vol) {
+    const t = ctx.currentTime + when, [f1, f2] = VOWELS[(Math.random() * VOWELS.length) | 0];
+    const o = ctx.createOscillator(), g = ctx.createGain(), mix = ctx.createGain(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(pitch * 1.08, t); o.frequency.exponentialRampToValueAtTime(pitch * 0.94, t + len);
+    for (const [f, q, a] of [[f1, 6, 1], [f2, 9, 0.6]]) { const b = ctx.createBiquadFilter(); b.type = 'bandpass'; b.frequency.value = f; b.Q.value = q; const bg = ctx.createGain(); bg.gain.value = a; o.connect(b); b.connect(bg); bg.connect(mix); }
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.012); g.gain.setTargetAtTime(0.0001, t + len * 0.7, len * 0.25);
+    mix.connect(g); g.connect(dest(0.12)); o.start(t); o.stop(t + len + 0.1);
+  }
   return {
     ensure,
     /** a short 'talking' blip for story dialogue; pitch per speaker */
     voice(pitch) {
       if (!sfxOn || !ensure()) return; const now = ctx.currentTime; if (now - (lastAt.voice || 0) < 0.055) return; lastAt.voice = now;
-      try { tone(pitch * (0.9 + Math.random() * 0.25), .045, 'square', .03); } catch (e) { }
+      try { V = 1; PAN = 0; syllable(0, pitch * (0.92 + Math.random() * 0.2), 0.07, 0.11); } catch (e) { }
     },
-    play(n) {
-      if (n === 'win' || n === 'lose') { if (ensure()) SFX[n](); return; }
+    /** a short burst of radio chatter: n syllables with a natural rise and fall */
+    chatter(pitch, n) {
+      if (!sfxOn || !ensure()) return; V = 1; PAN = 0;
+      try { let t = 0.05; for (let i = 0; i < n; i++) { const len = 0.055 + Math.random() * 0.05, contour = 1 + 0.12 * Math.sin(i / Math.max(1, n - 1) * Math.PI) - (i === n - 1 ? 0.1 : 0); syllable(t, pitch * contour * (0.95 + Math.random() * 0.1), len, 0.09); t += len + 0.02 + (Math.random() < 0.2 ? 0.06 : 0); } } catch (e) { }
+    },
+    /** a crewmate's battle cry when their skill fires ("hup-HA!") */
+    bark(pitch, deep) {
+      if (!sfxOn || !ensure()) return; V = 1; PAN = 0;
+      try { const p = pitch * (deep ? 0.85 : 1); syllable(0.02, p * 0.95, 0.07, 0.13); syllable(0.12, p * 1.3, 0.16, 0.16); } catch (e) { }
+    },
+    /** pan: -1 (left) .. 1 (right) */
+    play(n, pan) {
+      if (n === 'win' || n === 'lose') { if (ensure()) { V = 1; PAN = 0; SFX[n](); } return; }
       if (!sfxOn || !ensure() || !SFX[n]) return;
-      const gap = THROTTLE[n]; if (gap) { const now = ctx.currentTime; if (now - (lastAt[n] || 0) < gap) return; lastAt[n] = now; }
+      const now = ctx.currentTime, gap = THROTTLE[n]; if (gap) { if (now - (lastAt[n] || 0) < gap) return; lastAt[n] = now; }
+      if (CHEAP.has(n) && live > 14) return;
+      live++; setTimeout(() => { live--; }, 350);
+      V = n === 'click' || n === 'type' ? 1 : 1 + (Math.random() - 0.5) * 0.1; PAN = pan || 0;
       try { SFX[n](); } catch (e) { }
+    },
+    /** low-pass the music (pause menu) */
+    muffle(on) {
+      on = !!on; if (on === muffled || !ctx || !mfilt) return; muffled = on;
+      mfilt.frequency.setTargetAtTime(on ? 650 : 20000, ctx.currentTime, on ? 0.08 : 0.2);
     },
     setSfx(v) { sfxOn = !!v; },
     setMusic(v) { musicOn = !!v; if (musicBus) musicBus.gain.setTargetAtTime(musicOn ? 0.55 : 0, ctx.currentTime, 0.1); },
@@ -309,14 +383,23 @@ const Sound = (() => {
     stopMusic() { clearInterval(timer); timer = 0; },
     /** Dev/test helper: render a mood offline to an AudioBuffer (does not touch the live context). */
     preview(mood, intensity, danger, seconds) {
-      const saved = { ctx, master, comp, musicBus, sfxBus, verb, verbIn, dly, noiseBuf, S: Object.assign({}, S), musicOn };
+      const saved = { ctx, master, comp, musicBus, sfxBus, verb, verbIn, dly, noiseBuf, duckG, mfilt, sfxVerb, S: Object.assign({}, S), musicOn };
       const off = new OfflineAudioContext(2, Math.floor(44100 * seconds), 44100);
       build(off); musicOn = true; musicBus.gain.value = 0.55;
       Object.assign(S, { mood, pendingMood: null, bpm: BPM[mood], step: 0, next: 0.05, intensity, wantIntensity: intensity, danger: danger || 0, sting: 0 });
       while (S.next < seconds - 0.5) { scheduleStep(S.step, S.next); S.next += 60 / S.bpm / 4; S.step++; }
-      const restore = () => { ({ ctx, master, comp, musicBus, sfxBus, verb, verbIn, dly, noiseBuf, musicOn } = saved); Object.assign(S, saved.S); };
+      const restore = () => { ({ ctx, master, comp, musicBus, sfxBus, verb, verbIn, dly, noiseBuf, duckG, mfilt, sfxVerb, musicOn } = saved); Object.assign(S, saved.S); };
       return off.startRendering().then(b => { restore(); return b; }, e => { restore(); throw e; });
     },
+    /** Dev/test helper: render one sound effect offline; resolves to its peak level (0 = silent). */
+    previewSfx(n, pan) {
+      const saved = { ctx, master, comp, musicBus, sfxBus, verb, verbIn, dly, noiseBuf, duckG, mfilt, sfxVerb, musicOn };
+      const off = new OfflineAudioContext(2, 44100 * 2, 44100); build(off); musicOn = false; V = 1; PAN = pan || 0;
+      const restore = () => { ({ ctx, master, comp, musicBus, sfxBus, verb, verbIn, dly, noiseBuf, duckG, mfilt, sfxVerb, musicOn } = saved); };
+      try { if (n === 'chatter') { for (let i = 0; i < 4; i++) syllable(i * 0.09, 300, 0.07, 0.1); } else SFX[n](); } catch (e) { restore(); return Promise.reject(e); }
+      return off.startRendering().then(b => { restore(); let pk = 0; for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < d.length; i++) pk = Math.max(pk, Math.abs(d[i])); } return pk; }, e => { restore(); throw e; });
+    },
+    sfxNames: () => Object.keys(SFX),
     state: () => ({ mood: S.mood, pending: S.pendingMood, intensity: S.intensity, danger: S.danger, bpm: S.bpm })
   };
 })();
